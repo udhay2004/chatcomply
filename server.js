@@ -26,7 +26,7 @@ const MONGODB_URI        = (process.env.MONGODB_URI        || '').trim();
 const GOOGLE_SHEET_ID    = (process.env.GOOGLE_SHEET_ID    || '').trim();
 const GOOGLE_CREDENTIALS = (process.env.GOOGLE_CREDENTIALS || '').trim();
 const RESEND_API_KEY     = (process.env.RESEND_API_KEY     || '').trim();
-const NOTIFY_EMAIL       = (process.env.NOTIFY_EMAIL       || 'udhaymarwah96@gmail.com').trim();
+const NOTIFY_EMAIL       = (process.env.NOTIFY_EMAIL       || 'sales@complyglobally.com').trim();
 const FROM_EMAIL         = (process.env.FROM_EMAIL         || 'Comply Bot <onboarding@resend.dev>').trim();
 const KEEP_ALIVE_URL     = (process.env.KEEP_ALIVE_URL     || '').trim();
 
@@ -74,6 +74,9 @@ async function connectMongo() {
     leadsCol    = db.collection('leads');               // SHARED leads — same as WhatsApp bot
     await sessionsCol.createIndex({ sessionId: 1 }, { unique: true });
     await sessionsCol.createIndex({ lastActive: 1 }, { expireAfterSeconds: 86400 });
+    // Index for cross-device lead matching by email
+    await leadsCol.createIndex({ email: 1 });
+    await leadsCol.createIndex({ phone: 1 });
     console.log('✅ MongoDB connected — db: comply_globally, leads collection shared');
   } catch (err) {
     console.error('❌ MongoDB error:', err.message);
@@ -85,14 +88,15 @@ function freshSession(sessionId) {
     sessionId,
     history: [],
     leadData: {
-      name:           null,
-      email:          null,
-      phone:          null,
-      currentCountry: null,
-      targetCountry:  null,
-      serviceNeeded:  null,
-      businessStage:  null,
-      timeline:       null,
+      name:                null,
+      email:               null,
+      phone:               null,
+      currentCountry:      null,
+      targetCountry:       null,
+      serviceNeeded:       null,
+      businessStage:       null,
+      timeline:            null,
+      documentsRequired:   null,
     },
     leadSaved:   false,
     createdAt:   new Date(),
@@ -125,14 +129,52 @@ async function saveSession(session) {
   }
 }
 
+// ─────────────────────────────────────────────
+// CROSS-DEVICE LEAD DEDUPLICATION
+// ─────────────────────────────────────────────
+async function findExistingLead(leadData) {
+  if (!leadsCol) return null;
+  
+  // Try to find by email first (most reliable)
+  if (leadData.email) {
+    const byEmail = await leadsCol.findOne({ email: leadData.email });
+    if (byEmail) return byEmail;
+  }
+  
+  // Try phone as fallback
+  if (leadData.phone) {
+    const byPhone = await leadsCol.findOne({ phone: leadData.phone });
+    if (byPhone) return byPhone;
+  }
+  
+  return null;
+}
+
 async function saveLead(leadData) {
   if (!leadsCol) return;
-  await leadsCol.insertOne({
-    ...leadData,
-    source:    'website',           // so CRM can tell where this lead came from
-    createdAt: new Date(),
-  });
-  console.log(`✅ Lead saved to MongoDB: ${leadData.name || leadData.email}`);
+  
+  try {
+    // Check if lead already exists (cross-device check)
+    const existing = await findExistingLead(leadData);
+    
+    if (existing) {
+      // Update existing lead with new/additional info
+      const updatedLead = { ...existing, ...leadData, lastUpdated: new Date() };
+      await leadsCol.replaceOne({ _id: existing._id }, updatedLead);
+      console.log(`✅ Lead updated (cross-device): ${leadData.email || leadData.phone}`);
+    } else {
+      // Insert new lead
+      await leadsCol.insertOne({
+        ...leadData,
+        source:    'website',
+        createdAt: new Date(),
+        lastUpdated: new Date(),
+      });
+      console.log(`✅ Lead saved to MongoDB: ${leadData.name || leadData.email}`);
+    }
+  } catch (err) {
+    console.error('❌ Error saving lead:', err.message);
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -153,7 +195,7 @@ async function appendToSheet(leadData) {
     if (!existing.data.values) {
       await sheets.spreadsheets.values.append({
         spreadsheetId: GOOGLE_SHEET_ID, range: 'Sheet1!A1', valueInputOption: 'RAW',
-        requestBody: { values: [['Timestamp','Source','Name','Email','Phone','Current Country','Target Country','Service','Stage','Timeline']] },
+        requestBody: { values: [['Timestamp','Source','Name','Email','Phone','Current Country','Target Country','Service','Stage','Timeline','Documents Required']] },
       });
     }
 
@@ -164,6 +206,7 @@ async function appendToSheet(leadData) {
         leadData.name || '', leadData.email || '', leadData.phone || '',
         leadData.currentCountry || '', leadData.targetCountry || '',
         leadData.serviceNeeded || '', leadData.businessStage || '', leadData.timeline || '',
+        leadData.documentsRequired || '',
       ]] },
     });
     console.log('✅ Lead written to Google Sheet');
@@ -205,6 +248,7 @@ async function sendNewLeadEmail(leadData) {
                 ['Service', leadData.serviceNeeded],
                 ['Stage', leadData.businessStage],
                 ['Timeline', leadData.timeline],
+                ['Documents Required', leadData.documentsRequired],
               ].map(([k,v], i) => `
                 <tr style="background:${i%2===0?'#fff':'#f5f5f5'}">
                   <td style="padding:9px 12px;color:#666;width:140px">${k}</td>
@@ -223,9 +267,9 @@ async function sendNewLeadEmail(leadData) {
 }
 
 // ─────────────────────────────────────────────
-// SYSTEM PROMPT
+// SYSTEM PROMPT — Updated with new requirements
 // ─────────────────────────────────────────────
-const SYSTEM_PROMPT = `You are Comply, a warm and professional Global Expansion Assistant for Connect Ventures Inc. (brand: Comply Globally). You help entrepreneurs, startups, and businesses expand internationally via the company website chat.
+const SYSTEM_PROMPT = `You are Comply, a warm and professional Global Expansion Assistant for Connect Ventures Inc. (brand: Comply Globally). You help entrepreneurs, startups, and businesses establish foreign corporations and expand internationally via the company website chat.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ABOUT COMPLY GLOBALLY
@@ -233,18 +277,30 @@ ABOUT COMPLY GLOBALLY
 Headquarters: Delaware, USA
 
 CORE SERVICES:
-1. Company Formation – Incorporation in international jurisdictions
+1. Foreign Corporation Formation – Incorporation in international jurisdictions
 2. Banking Setup – Corporate accounts and cross-border finance
 3. Tax Compliance – IRS/GST/VAT filings, corporate tax, transfer pricing
 4. Annual Maintenance – Registered Agent, secretarial, compliance renewals
-5. FEMA & Investment Advisory – For Indian businesses (RBI/FEMA rules)
+5. Investment Advisory – For businesses and startups seeking growth capital
 6. Residency & Golden Visas – Investment-linked residency (NOT travel visas)
 
-COUNTRIES SERVED:
-Americas: USA (Delaware), Canada
-Middle East: UAE, Saudi Arabia, Egypt, Nigeria, Mauritius
-Europe: UK, Netherlands, all 27 EU countries
-Asia-Pacific: India, Singapore, Hong Kong, Indonesia, Thailand, Malaysia, Philippines
+COUNTRIES SERVED (47+ jurisdictions):
+Americas: USA (Delaware, Wyoming, Florida, Nevada), Canada (Ontario, British Columbia)
+Middle East & Africa: UAE, Saudi Arabia, Egypt, Nigeria, Mauritius, Bahrain, Kuwait, Oman, Qatar
+Europe: UK, Netherlands, Germany, France, Italy, Spain, Portugal, Ireland, Luxembourg, Cyprus, Malta, Belgium, Austria, Sweden, Poland, Denmark
+Asia-Pacific: India, Singapore, Hong Kong, Indonesia, Thailand, Malaysia, Philippines, Vietnam, South Korea, Japan, Australia, New Zealand
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+REQUIRED DOCUMENTS (Standard)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+For foreign corporation formation, we typically need:
+✓ Scanned Copy of Passport – All four corners must be visible
+✓ Recent Bank E-Statement – Not older than 45 days (address proof)
+✓ Scanned PAN and Aadhar Card Copy – For Indian directors/shareholders
+✓ Business Plan Outline – Your vision and expansion strategy
+✓ Initial Capital Details – Shareholding structure and investment amount
+
+(Specific requirements vary by jurisdiction — our experts will confirm what you need)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR GOAL
@@ -253,7 +309,10 @@ Have a natural, helpful conversation. Collect these details without asking all a
 ✅ Full Name | ✅ Email address | ✅ Phone number | ✅ Current country | ✅ Target country | ✅ Service needed | ✅ Business stage | ✅ Timeline
 
 Once you have Name + Email + Current Country + Target Country, end warmly:
-"Thank you [Name]! Our expert will review your profile and reach out at [email] within 24 hours. You can also reach us directly at hello@complyglobally.com or +1 (302) 803-5851 🎉"
+"Thank you [Name]! Our expert will review your profile and reach out at [email] within 24 hours. You can also contact us directly:
+📧 sales@complyglobally.com
+📞 +1 (302) 214-1717 | +91 99999 81613
+We're excited to help you expand globally! 🎉"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULES
@@ -262,7 +321,8 @@ RULES
 - Warm, consultative tone — like a smart advisor, not a form.
 - First message: introduce yourself briefly, ask what country they are based in.
 - Collect info naturally through the flow of conversation.
-- If they ask for contact details: hello@complyglobally.com | +1 (302) 803-5851
+- If they ask about documents, mention the standard requirements above.
+- If they ask for contact details: sales@complyglobally.com | +1 (302) 214-1717 | +91 99999 81613
 - No specific legal/tax advice → "Our experts will guide you"
 - No prices → "Our team sends a custom quote based on your jurisdiction"
 - No guarantees on approvals`;
@@ -309,10 +369,19 @@ function extractLeadData(session, userMessage) {
     }
   }
 
-  // Countries
-  const countries = ['vietnam','india','uae','dubai','abu dhabi','usa','united states','america','uk','united kingdom','britain','england','singapore','hong kong','canada','netherlands','holland','saudi arabia','saudi','mauritius','egypt','nigeria','indonesia','thailand','malaysia','philippines','germany','france','italy','spain','portugal','ireland','luxembourg','cyprus','malta','bahrain','kuwait','oman','qatar'];
-  const countryMap = { 'dubai':'UAE','abu dhabi':'UAE','america':'USA','united states':'USA','britain':'UK','england':'UK','united kingdom':'UK','holland':'Netherlands','saudi':'Saudi Arabia' };
-  const expansionKw = ['expand to','expanding to','open in','setup in','set up in','register in','incorporate in','start in','move to','moving to','want to go','looking to expand','planning to','want to open'];
+  // Countries — expanded to 47+
+  const countries = [
+    'vietnam','india','uae','dubai','abu dhabi','usa','united states','america','uk','united kingdom','britain','england',
+    'singapore','hong kong','canada','netherlands','holland','saudi arabia','saudi','mauritius','egypt','nigeria','indonesia',
+    'thailand','malaysia','philippines','germany','france','italy','spain','portugal','ireland','luxembourg','cyprus','malta',
+    'bahrain','kuwait','oman','qatar','belgium','austria','sweden','poland','denmark','south korea','korea','japan','australia',
+    'new zealand','wyoming','nevada','florida','ontario','british columbia'
+  ];
+  const countryMap = { 
+    'dubai':'UAE','abu dhabi':'UAE','america':'USA','united states':'USA','britain':'UK','england':'UK',
+    'united kingdom':'UK','holland':'Netherlands','saudi':'Saudi Arabia','korea':'South Korea' 
+  };
+  const expansionKw = ['expand to','expanding to','open in','setup in','set up in','register in','incorporate in','start in','move to','moving to','want to go','looking to expand','planning to','want to open','establish in','form in'];
   const currentKw   = ['based in','currently based','i am in',"i'm in",'living in','located in','from','we are from','our office'];
   const isExpansion = expansionKw.some(k => msg.includes(k));
   const isCurrent   = currentKw.some(k => msg.includes(k));
@@ -328,21 +397,31 @@ function extractLeadData(session, userMessage) {
 
   // Service
   if (!lead.serviceNeeded) {
-    if (msg.match(/compan|incorporat|formation|register|llc|llp|pvt|entity|business setup/)) lead.serviceNeeded = 'Company Formation';
-    else if (msg.match(/bank|account|finance|payment/))   lead.serviceNeeded = 'Banking Setup';
-    else if (msg.match(/tax|vat|gst|irs|filing/))         lead.serviceNeeded = 'Tax Compliance';
-    else if (msg.match(/fema|rbi|overseas invest/))        lead.serviceNeeded = 'FEMA & Investment';
-    else if (msg.match(/visa|residency|golden visa/))      lead.serviceNeeded = 'Residency / Golden Visa';
-    else if (msg.match(/annual|maintenance|secretar/))     lead.serviceNeeded = 'Annual Maintenance';
+    if (msg.match(/compan|incorporat|formation|register|llc|llp|pvt|entity|business setup|foreign|corpor/)) 
+      lead.serviceNeeded = 'Foreign Corporation Formation';
+    else if (msg.match(/bank|account|finance|payment/))   
+      lead.serviceNeeded = 'Banking Setup';
+    else if (msg.match(/tax|vat|gst|irs|filing|compliance/))         
+      lead.serviceNeeded = 'Tax Compliance';
+    else if (msg.match(/invest|growth|capital|funding/))        
+      lead.serviceNeeded = 'Investment Advisory';
+    else if (msg.match(/visa|residency|golden visa/))      
+      lead.serviceNeeded = 'Residency / Golden Visa';
+    else if (msg.match(/annual|maintenance|secretar|renewal/))     
+      lead.serviceNeeded = 'Annual Maintenance';
     if (lead.serviceNeeded) console.log('📝 Service:', lead.serviceNeeded);
   }
 
   // Stage
   if (!lead.businessStage) {
-    if (msg.match(/startup|start.?up|just start|new business|early/)) lead.businessStage = 'Startup';
-    else if (msg.match(/freelanc|independ|consultant|solo/))           lead.businessStage = 'Freelancer';
-    else if (msg.match(/sme|small.?medium|small business/))            lead.businessStage = 'SME';
-    else if (msg.match(/established|enterprise|corporat|large|mnc/))   lead.businessStage = 'Established';
+    if (msg.match(/startup|start.?up|just start|new business|early/)) 
+      lead.businessStage = 'Startup';
+    else if (msg.match(/freelanc|independ|consultant|solo/))           
+      lead.businessStage = 'Freelancer';
+    else if (msg.match(/sme|small.?medium|small business/))            
+      lead.businessStage = 'SME';
+    else if (msg.match(/established|enterprise|corporat|large|mnc/))   
+      lead.businessStage = 'Established';
     if (lead.businessStage) console.log('📝 Stage:', lead.businessStage);
   }
 
@@ -356,9 +435,19 @@ function extractLeadData(session, userMessage) {
       else if (n <= 3)           lead.timeline = '1-3 months';
       else if (n <= 6)           lead.timeline = '3-6 months';
       else                       lead.timeline = '6+ months';
-    } else if (msg.match(/asap|urgent|immediately|right now|today/)) lead.timeline = 'Immediately';
-    else if (msg.match(/this month|soon|shortly/)) lead.timeline = 'Within 1 month';
+    } else if (msg.match(/asap|urgent|immediately|right now|today/)) 
+      lead.timeline = 'Immediately';
+    else if (msg.match(/this month|soon|shortly/)) 
+      lead.timeline = 'Within 1 month';
     if (lead.timeline) console.log('📝 Timeline:', lead.timeline);
+  }
+
+  // Documents Required
+  if (!lead.documentsRequired) {
+    if (msg.match(/document|passport|bank|statement|pan|aadhar|business plan|capital/)) {
+      lead.documentsRequired = 'Passport, Bank Statement, PAN, Aadhar, Business Plan, Capital Details';
+      console.log('📝 Documents:', lead.documentsRequired);
+    }
   }
 }
 
@@ -420,7 +509,7 @@ async function getClaudeReply(session, userMessage) {
 
   } catch (err) {
     console.error('❌ Claude error:', err.message);
-    return "I'm having a technical issue. Please email us at hello@complyglobally.com 🙏";
+    return "I'm having a technical issue. Please email us at sales@complyglobally.com 🙏";
   }
 }
 
