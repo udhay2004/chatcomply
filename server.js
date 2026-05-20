@@ -43,7 +43,6 @@ const KEEP_ALIVE_URL     = (process.env.KEEP_ALIVE_URL     || '').trim();
 
 // ─────────────────────────────────────────────
 // KEEP-ALIVE — pings /health every 14 min
-// so Render free tier never goes to sleep
 // ─────────────────────────────────────────────
 function startKeepAlive() {
   const url = KEEP_ALIVE_URL || `http://localhost:${process.env.PORT || 5000}/health`;
@@ -69,12 +68,11 @@ async function connectMongo() {
   try {
     const client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: 5000 });
     await client.connect();
-    const db    = client.db('comply_globally');        // same DB as WhatsApp bot
-    sessionsCol = db.collection('web_sessions');        // separate sessions collection
-    leadsCol    = db.collection('leads');               // SHARED leads — same as WhatsApp bot
+    const db    = client.db('comply_globally');
+    sessionsCol = db.collection('web_sessions');
+    leadsCol    = db.collection('leads');
     await sessionsCol.createIndex({ sessionId: 1 }, { unique: true });
     await sessionsCol.createIndex({ lastActive: 1 }, { expireAfterSeconds: 86400 });
-    // Index for cross-device lead matching by email
     await leadsCol.createIndex({ email: 1 });
     await leadsCol.createIndex({ phone: 1 });
     console.log('✅ MongoDB connected — db: comply_globally, leads collection shared');
@@ -98,13 +96,13 @@ function freshSession(sessionId) {
       timeline:            null,
       documentsRequired:   null,
     },
-    leadSaved:   false,
-    createdAt:   new Date(),
-    lastActive:  new Date(),
+    leadSaved:        false,
+    humanRequested:   false,   // FIX 3: track human-handoff requests
+    createdAt:        new Date(),
+    lastActive:       new Date(),
   };
 }
 
-// In-memory fallback if Mongo is not connected
 const memSessions = {};
 
 async function getSession(sessionId) {
@@ -134,40 +132,30 @@ async function saveSession(session) {
 // ─────────────────────────────────────────────
 async function findExistingLead(leadData) {
   if (!leadsCol) return null;
-  
-  // Try to find by email first (most reliable)
   if (leadData.email) {
     const byEmail = await leadsCol.findOne({ email: leadData.email });
     if (byEmail) return byEmail;
   }
-  
-  // Try phone as fallback
   if (leadData.phone) {
     const byPhone = await leadsCol.findOne({ phone: leadData.phone });
     if (byPhone) return byPhone;
   }
-  
   return null;
 }
 
 async function saveLead(leadData) {
   if (!leadsCol) return;
-  
   try {
-    // Check if lead already exists (cross-device check)
     const existing = await findExistingLead(leadData);
-    
     if (existing) {
-      // Update existing lead with new/additional info
       const updatedLead = { ...existing, ...leadData, lastUpdated: new Date() };
       await leadsCol.replaceOne({ _id: existing._id }, updatedLead);
       console.log(`✅ Lead updated (cross-device): ${leadData.email || leadData.phone}`);
     } else {
-      // Insert new lead
       await leadsCol.insertOne({
         ...leadData,
-        source:    'website',
-        createdAt: new Date(),
+        source:      'website',
+        createdAt:   new Date(),
         lastUpdated: new Date(),
       });
       console.log(`✅ Lead saved to MongoDB: ${leadData.name || leadData.email}`);
@@ -267,7 +255,7 @@ async function sendNewLeadEmail(leadData) {
 }
 
 // ─────────────────────────────────────────────
-// SYSTEM PROMPT — Updated with new requirements
+// SYSTEM PROMPT
 // ─────────────────────────────────────────────
 const SYSTEM_PROMPT = `You are Comply, a warm and professional Global Expansion Assistant for Connect Ventures Inc. (brand: Comply Globally). You help entrepreneurs, startups, and businesses establish foreign corporations and expand internationally via the company website chat.
 
@@ -277,12 +265,12 @@ ABOUT COMPLY GLOBALLY
 Headquarters: Delaware, USA
 
 CORE SERVICES:
-1. Foreign Corporation Formation – Incorporation in international jurisdictions
-2. Banking Setup – Corporate accounts and cross-border finance
-3. Tax Compliance – IRS/GST/VAT filings, corporate tax, transfer pricing
-4. Annual Maintenance – Registered Agent, secretarial, compliance renewals
+1. Foreign Corporation Formation – Incorporation in foreign countries across 47+ jurisdictions
+2. Banking & Finance – Corporate accounts, cross-border payments, financial structuring
+3. International Tax & Secretarial Compliance – IRS/GST/VAT filings, corporate tax, transfer pricing, annual secretarial
+4. EXIM – Import/export licensing, trade documentation, customs advisory
 5. Investment Advisory – For businesses and startups seeking growth capital
-6. Residency & Golden Visas – Investment-linked residency (NOT travel visas)
+6. Residency & Golden Visas – Investment-linked residency programs (NOT travel visas)
 
 COUNTRIES SERVED (47+ jurisdictions):
 Americas: USA (Delaware, Wyoming, Florida, Nevada), Canada (Ontario, British Columbia)
@@ -303,6 +291,12 @@ For foreign corporation formation, we typically need:
 (Specific requirements vary by jurisdiction — our experts will confirm what you need)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
+INTRO MESSAGE (first message only)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+When greeting the user for the first time, introduce yourself like this (adapt naturally, don't copy word for word):
+"Hi there! 👋 I'm Comply, your Global Expansion Assistant from Comply Globally. We help businesses with Incorporation in foreign countries, Banking & Finance, International Tax & Secretarial Compliance, EXIM, and many more services across 47+ countries. I'd love to help you expand globally — which country are you currently based in?"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 YOUR GOAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 Have a natural, helpful conversation. Collect these details without asking all at once:
@@ -315,11 +309,19 @@ Once you have Name + Email + Current Country + Target Country, end warmly:
 We're excited to help you expand globally! 🎉"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
+HUMAN HANDOFF RULE
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+If the user asks to speak with a person, agent, human, or expert:
+1. If you don't have their name yet, ask: "Of course! May I have your name first so our team knows who to reach out to?"
+2. Once you have their name, ask: "Is there anything specific you'd like to share with our expert beforehand — like the country you're targeting or the type of service you need?"
+3. Then confirm: "Perfect! Our team will reach out to you shortly. You can also ping us directly at sales@complyglobally.com or call +1 (302) 214-1717 / +91 99999 81613. 😊"
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━
 RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 - Keep replies short and clear (2-4 lines). Website chat, not an essay.
 - Warm, consultative tone — like a smart advisor, not a form.
-- First message: introduce yourself briefly, ask what country they are based in.
+- First message: use the intro format above, then ask which country they are based in.
 - Collect info naturally through the flow of conversation.
 - If they ask about documents, mention the standard requirements above.
 - If they ask for contact details: sales@complyglobally.com | +1 (302) 214-1717 | +91 99999 81613
@@ -328,24 +330,50 @@ RULES
 - No guarantees on approvals`;
 
 // ─────────────────────────────────────────────
-// LEAD EXTRACTION
+// LEAD EXTRACTION  (FIX 2: hardened name detection)
 // ─────────────────────────────────────────────
+
+// Words that must NEVER be captured as a name
+const NAME_BLOCKLIST = new Set([
+  // greetings / fillers
+  'hi','hello','hey','there','good','well','yes','no','ok','okay','sure','please','thanks','thank',
+  'sir','madam','dear','myself','my',
+  // service / business vocabulary
+  'incorporation','incorporate','formation','company','companies','business','businesses','entity',
+  'register','registration','foreign','corpor','corporation','startup','freelancer','consultant',
+  'expand','expansion','expanding','setup','set','open','start','establish','form',
+  'banking','finance','tax','compliance','secretarial','exim','import','export','residency','visa',
+  'investment','advisory','annual','maintenance',
+  // countries / regions (common ones)
+  'india','uae','dubai','usa','uk','singapore','canada','hongkong','germany','france',
+  'australia','netherlands','ireland','malta','cyprus','mauritius','bahrain','qatar',
+  'kuwait','oman','saudi','nigeria','egypt','indonesia','thailand','malaysia','vietnam',
+  'philippines','korea','japan','newzealand','ontario','delaware','wyoming','florida','nevada',
+  // generic descriptors
+  'based','from','in','at','looking','want','need','just','not','with','for','about','some',
+  'new','old','small','large','big','medium','early','late','soon','asap','today',
+  'agent','human','person','someone','expert','team','support','help','contact',
+]);
+
 function extractLeadData(session, userMessage) {
   const lead = session.leadData;
   const msg  = userMessage.toLowerCase().trim();
 
-  // Name
+  // ── NAME (FIX 2: strict blocklist + structure guard) ──────────────────────
   if (!lead.name) {
-    const patterns = [
-      /(?:my name is|i'm|i am|this is|call me)\s+([a-zA-Z]+(?:\s+[a-zA-Z]+){0,2})/i,
-      /^([a-zA-Z]+(?:\s+[a-zA-Z]+){1,2})\s*(?:here|,|$)/i,
+    const namePatterns = [
+      /(?:my name is|i'm|i am|this is|call me|name's)\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i,
+      /^([A-Za-z]+(?:\s+[A-Za-z]+){1,2})\s*(?:here|,|$)/i,
     ];
-    const skip = new Set(['based','from','india','uae','uk','usa','hi','hello','hey','yes','no','sir','madam','canada','singapore','dubai','there','good','well','not','just','for','with','want','expand','looking','please','thanks']);
-    for (const p of patterns) {
-      const m = userMessage.match(p);
-      if (m) {
-        const words = m[1].trim().split(/\s+/).filter(w => !skip.has(w.toLowerCase()));
-        if (words.length) {
+    for (const pattern of namePatterns) {
+      const match = userMessage.match(pattern);
+      if (match) {
+        const candidate = match[1].trim();
+        const words = candidate.split(/\s+/);
+        // Reject if ANY word is in the blocklist, or if any word > 14 chars (likely a keyword)
+        const isClean = words.every(w => !NAME_BLOCKLIST.has(w.toLowerCase()) && w.length <= 14);
+        // Also reject if the candidate is a single very-common English word (< 3 chars)
+        if (isClean && candidate.length >= 2) {
           lead.name = words.map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
           console.log('📝 Name:', lead.name);
           break;
@@ -354,13 +382,13 @@ function extractLeadData(session, userMessage) {
     }
   }
 
-  // Email
+  // ── EMAIL ──────────────────────────────────────────────────────────────────
   if (!lead.email) {
     const m = userMessage.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
     if (m) { lead.email = m[0]; console.log('📝 Email:', lead.email); }
   }
 
-  // Phone
+  // ── PHONE ─────────────────────────────────────────────────────────────────
   if (!lead.phone) {
     const m = userMessage.match(/(?:\+?\d[\d\s\-]{8,14}\d)/);
     if (m) {
@@ -369,17 +397,17 @@ function extractLeadData(session, userMessage) {
     }
   }
 
-  // Countries — expanded to 47+
+  // ── COUNTRIES ─────────────────────────────────────────────────────────────
   const countries = [
     'vietnam','india','uae','dubai','abu dhabi','usa','united states','america','uk','united kingdom','britain','england',
     'singapore','hong kong','canada','netherlands','holland','saudi arabia','saudi','mauritius','egypt','nigeria','indonesia',
     'thailand','malaysia','philippines','germany','france','italy','spain','portugal','ireland','luxembourg','cyprus','malta',
     'bahrain','kuwait','oman','qatar','belgium','austria','sweden','poland','denmark','south korea','korea','japan','australia',
-    'new zealand','wyoming','nevada','florida','ontario','british columbia'
+    'new zealand','wyoming','nevada','florida','ontario','british columbia',
   ];
-  const countryMap = { 
+  const countryMap = {
     'dubai':'UAE','abu dhabi':'UAE','america':'USA','united states':'USA','britain':'UK','england':'UK',
-    'united kingdom':'UK','holland':'Netherlands','saudi':'Saudi Arabia','korea':'South Korea' 
+    'united kingdom':'UK','holland':'Netherlands','saudi':'Saudi Arabia','korea':'South Korea',
   };
   const expansionKw = ['expand to','expanding to','open in','setup in','set up in','register in','incorporate in','start in','move to','moving to','want to go','looking to expand','planning to','want to open','establish in','form in'];
   const currentKw   = ['based in','currently based','i am in',"i'm in",'living in','located in','from','we are from','our office'];
@@ -389,64 +417,69 @@ function extractLeadData(session, userMessage) {
   for (const c of countries) {
     if (!msg.includes(c)) continue;
     const mapped = countryMap[c] || c.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-    if (isExpansion && !lead.targetCountry)       { lead.targetCountry  = mapped; console.log('📝 Target:', mapped); break; }
-    else if (isCurrent && !lead.currentCountry)   { lead.currentCountry = mapped; console.log('📝 Current:', mapped); break; }
-    else if (!lead.currentCountry)                { lead.currentCountry = mapped; console.log('📝 Current (inferred):', mapped); break; }
-    else if (!lead.targetCountry)                 { lead.targetCountry  = mapped; console.log('📝 Target (inferred):', mapped); break; }
+    if (isExpansion && !lead.targetCountry)     { lead.targetCountry  = mapped; console.log('📝 Target:', mapped); break; }
+    else if (isCurrent && !lead.currentCountry) { lead.currentCountry = mapped; console.log('📝 Current:', mapped); break; }
+    else if (!lead.currentCountry)              { lead.currentCountry = mapped; console.log('📝 Current (inferred):', mapped); break; }
+    else if (!lead.targetCountry)               { lead.targetCountry  = mapped; console.log('📝 Target (inferred):', mapped); break; }
   }
 
-  // Service
+  // ── SERVICE ───────────────────────────────────────────────────────────────
   if (!lead.serviceNeeded) {
-    if (msg.match(/compan|incorporat|formation|register|llc|llp|pvt|entity|business setup|foreign|corpor/)) 
+    if      (msg.match(/compan|incorporat|formation|register|llc|llp|pvt|entity|business setup|foreign|corpor/))
       lead.serviceNeeded = 'Foreign Corporation Formation';
-    else if (msg.match(/bank|account|finance|payment/))   
+    else if (msg.match(/bank|account|finance|payment/))
       lead.serviceNeeded = 'Banking Setup';
-    else if (msg.match(/tax|vat|gst|irs|filing|compliance/))         
-      lead.serviceNeeded = 'Tax Compliance';
-    else if (msg.match(/invest|growth|capital|funding/))        
+    else if (msg.match(/tax|vat|gst|irs|filing|compliance|secretarial/))
+      lead.serviceNeeded = 'International Tax & Secretarial Compliance';
+    else if (msg.match(/exim|import|export|trade|customs/))
+      lead.serviceNeeded = 'EXIM';
+    else if (msg.match(/invest|growth|capital|funding/))
       lead.serviceNeeded = 'Investment Advisory';
-    else if (msg.match(/visa|residency|golden visa/))      
+    else if (msg.match(/visa|residency|golden visa/))
       lead.serviceNeeded = 'Residency / Golden Visa';
-    else if (msg.match(/annual|maintenance|secretar|renewal/))     
+    else if (msg.match(/annual|maintenance|renewal/))
       lead.serviceNeeded = 'Annual Maintenance';
     if (lead.serviceNeeded) console.log('📝 Service:', lead.serviceNeeded);
   }
 
-  // Stage
+  // ── STAGE ─────────────────────────────────────────────────────────────────
   if (!lead.businessStage) {
-    if (msg.match(/startup|start.?up|just start|new business|early/)) 
-      lead.businessStage = 'Startup';
-    else if (msg.match(/freelanc|independ|consultant|solo/))           
-      lead.businessStage = 'Freelancer';
-    else if (msg.match(/sme|small.?medium|small business/))            
-      lead.businessStage = 'SME';
-    else if (msg.match(/established|enterprise|corporat|large|mnc/))   
-      lead.businessStage = 'Established';
+    if      (msg.match(/startup|start.?up|just start|new business|early/)) lead.businessStage = 'Startup';
+    else if (msg.match(/freelanc|independ|consultant|solo/))               lead.businessStage = 'Freelancer';
+    else if (msg.match(/sme|small.?medium|small business/))                lead.businessStage = 'SME';
+    else if (msg.match(/established|enterprise|corporat|large|mnc/))       lead.businessStage = 'Established';
     if (lead.businessStage) console.log('📝 Stage:', lead.businessStage);
   }
 
-  // Timeline
+  // ── TIMELINE ──────────────────────────────────────────────────────────────
   if (!lead.timeline) {
     const tm = msg.match(/(\d+)\s*(?:month|week|year)/);
     if (tm) {
       const n = parseInt(tm[1]);
-      if (msg.includes('week'))  lead.timeline = n <= 2 ? 'Immediately' : 'Within 1 month';
-      else if (n <= 1)           lead.timeline = 'Within 1 month';
-      else if (n <= 3)           lead.timeline = '1-3 months';
-      else if (n <= 6)           lead.timeline = '3-6 months';
-      else                       lead.timeline = '6+ months';
-    } else if (msg.match(/asap|urgent|immediately|right now|today/)) 
-      lead.timeline = 'Immediately';
-    else if (msg.match(/this month|soon|shortly/)) 
-      lead.timeline = 'Within 1 month';
+      if      (msg.includes('week') && n <= 2) lead.timeline = 'Immediately';
+      else if (msg.includes('week'))           lead.timeline = 'Within 1 month';
+      else if (n <= 1)                         lead.timeline = 'Within 1 month';
+      else if (n <= 3)                         lead.timeline = '1-3 months';
+      else if (n <= 6)                         lead.timeline = '3-6 months';
+      else                                     lead.timeline = '6+ months';
+    } else if (msg.match(/asap|urgent|immediately|right now|today/)) lead.timeline = 'Immediately';
+    else if   (msg.match(/this month|soon|shortly/))                  lead.timeline = 'Within 1 month';
     if (lead.timeline) console.log('📝 Timeline:', lead.timeline);
   }
 
-  // Documents Required
+  // ── DOCUMENTS ─────────────────────────────────────────────────────────────
   if (!lead.documentsRequired) {
     if (msg.match(/document|passport|bank|statement|pan|aadhar|business plan|capital/)) {
       lead.documentsRequired = 'Passport, Bank Statement, PAN, Aadhar, Business Plan, Capital Details';
       console.log('📝 Documents:', lead.documentsRequired);
+    }
+  }
+
+  // ── HUMAN HANDOFF FLAG (FIX 3) ────────────────────────────────────────────
+  if (!session.humanRequested) {
+    if (msg.match(/speak to|talk to|connect (me )?with|transfer|human|agent|person|expert|representative|real person|someone/)) {
+      session.humanRequested = true;
+      console.log('🤝 Human handoff requested');
     }
   }
 }
@@ -462,7 +495,6 @@ async function getClaudeReply(session, userMessage) {
   session.history.push({ role: 'user', content: userMessage });
   if (session.history.length > 20) session.history = session.history.slice(-20);
 
-  // Build context note from what we already know — Claude won't re-ask
   const l = session.leadData;
   const known = [
     l.name           && `Name: ${l.name}`,
@@ -479,6 +511,11 @@ async function getClaudeReply(session, userMessage) {
     ? `\n\n[CUSTOMER CONTEXT — already known, do NOT re-ask these: ${known.join(' | ')}]`
     : '';
 
+  // Inject human-handoff instruction if flagged
+  const handoffNote = session.humanRequested
+    ? `\n\n[HANDOFF FLAG: User has asked to speak with a human/agent. Follow the HUMAN HANDOFF RULE exactly. Collect their name if missing, ask for any extra info, then confirm the team will reach out.]`
+    : '';
+
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -490,7 +527,7 @@ async function getClaudeReply(session, userMessage) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 500,
-        system: SYSTEM_PROMPT + contextNote,
+        system: SYSTEM_PROMPT + contextNote + handoffNote,
         messages: session.history,
       }),
     });
@@ -514,14 +551,13 @@ async function getClaudeReply(session, userMessage) {
 }
 
 // ─────────────────────────────────────────────
-// MAIN CHAT ENDPOINT  ← widget calls /api/chat
+// MAIN CHAT ENDPOINT
 // ─────────────────────────────────────────────
 app.post('/api/chat', async (req, res) => {
   try {
     let { message, sessionId } = req.body;
     if (!message) return res.json({ reply: 'Please send a message.' });
 
-    // Generate sessionId if widget didn't have one
     if (!sessionId) {
       sessionId = 'web_' + Math.random().toString(36).slice(2) + '_' + Date.now();
     }
@@ -542,7 +578,6 @@ app.post('/api/chat', async (req, res) => {
 
     await saveSession(session);
 
-    // Return sessionId so widget stores it
     res.json({ reply, sessionId, leadData: session.leadData });
 
   } catch (err) {
@@ -551,14 +586,14 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Also support /chat (backwards compatibility)
+// Backwards compatibility
 app.post('/chat', (req, res) => {
   req.url = '/api/chat';
   app._router.handle(req, res);
 });
 
 // ─────────────────────────────────────────────
-// CRM ENDPOINT — all leads for the dashboard
+// CRM ENDPOINT
 // ─────────────────────────────────────────────
 app.get('/leads', async (req, res) => {
   if (!leadsCol) return res.json([]);
