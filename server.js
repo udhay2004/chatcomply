@@ -85,7 +85,6 @@ function freshSession(sessionId) {
   return {
     sessionId,
     history: [],
-    isFirstMessage: true,
     leadData: {
       name:                null,
       email:               null,
@@ -501,9 +500,6 @@ function isCoreLeadComplete(lead) {
 // CLAUDE AI
 // ─────────────────────────────────────────────
 async function getClaudeReply(session, userMessage) {
-  // Mark that we've processed the first user message
-  session.isFirstMessage = false;
-
   session.history.push({ role: 'user', content: userMessage });
   if (session.history.length > 20) session.history = session.history.slice(-20);
 
@@ -575,18 +571,6 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const session = await getSession(sessionId);
-    
-    // FIRST MESSAGE: Return exact hardcoded opening (do NOT call Claude)
-    if (session.isFirstMessage) {
-      session.isFirstMessage = false;
-      extractLeadData(session, message);
-      await saveSession(session);
-      
-      const firstReply = "Hi there! 👋 I'm Comply, your Global Expansion Assistant from Comply Globally. We specialize in Foreign Corporation Formation, Banking & Finance, International Tax & Secretarial Compliance, EXIM, Investment Advisory, and Residency & Golden Visas—spanning 47+ countries worldwide. I'd love to help you expand globally!\n\nWhere are you currently based, and what should I call you?";
-      
-      return res.json({ reply: firstReply, sessionId, leadData: session.leadData });
-    }
-
     extractLeadData(session, message);
 
     const reply = await getClaudeReply(session, message);
