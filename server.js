@@ -85,6 +85,7 @@ function freshSession(sessionId) {
   return {
     sessionId,
     history: [],
+    isFirstMessage: true,
     leadData: {
       name:                null,
       email:               null,
@@ -97,7 +98,7 @@ function freshSession(sessionId) {
       documentsRequired:   null,
     },
     leadSaved:        false,
-    humanRequested:   false,   // FIX 3: track human-handoff requests
+    humanRequested:   false,
     createdAt:        new Date(),
     lastActive:       new Date(),
   };
@@ -264,7 +265,7 @@ ABOUT COMPLY GLOBALLY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 Headquarters: Delaware, USA
 
-CORE SERVICES:
+CORE SERVICES (6):
 1. Foreign Corporation Formation – Incorporation in foreign countries across 47+ jurisdictions
 2. Banking & Finance – Corporate accounts, cross-border payments, financial structuring
 3. International Tax & Secretarial Compliance – IRS/GST/VAT filings, corporate tax, transfer pricing, annual secretarial
@@ -291,21 +292,30 @@ For foreign corporation formation, we typically need:
 (Specific requirements vary by jurisdiction — our experts will confirm what you need)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-INTRO MESSAGE (first message only)
+FIRST MESSAGE BEHAVIOR (CRITICAL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-When greeting the user for the first time, introduce yourself like this (adapt naturally, don't copy word for word):
-"Hi there! 👋 I'm Comply, your Global Expansion Assistant from Comply Globally. We help businesses with Incorporation in foreign countries, Banking & Finance, International Tax & Secretarial Compliance, EXIM, and many more services across 47+ countries. I'd love to help you expand globally — which country are you currently based in?"
+When this is the first user message in the conversation, ALWAYS start with this exact opening (naturally conversational, grammatically polished):
+
+"Hi there! 👋 I'm Comply, your Global Expansion Assistant from Comply Globally. We specialize in Foreign Corporation Formation, Banking & Finance, International Tax & Secretarial Compliance, EXIM, Investment Advisory, and Residency & Golden Visas—spanning 47+ countries worldwide. I'd love to help you expand globally!
+
+Where are you currently based, and what should I call you?"
+
+This is your ONLY introduction. Do not repeat it in subsequent messages.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-YOUR GOAL
+CONVERSATION GOALS (AFTER FIRST MESSAGE)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-Have a natural, helpful conversation. Collect these details without asking all at once:
+Have a natural, consultative conversation and collect these details gradually (do NOT ask all at once):
 ✅ Full Name | ✅ Email address | ✅ Phone number | ✅ Current country | ✅ Target country | ✅ Service needed | ✅ Business stage | ✅ Timeline
 
-Once you have Name + Email + Current Country + Target Country, end warmly:
-"Thank you [Name]! Our expert will review your profile and reach out at [email] within 24 hours. You can also contact us directly:
+Once you have the CORE FOUR (Name + Email + Current Country + Target Country), end the conversation warmly with:
+
+"Thank you [Name]! Our expert team will review your profile and reach out to you at [email] within 24 hours. 
+
+You can also contact us directly:
 📧 sales@complyglobally.com
 📞 +1 (302) 214-1717 | +91 99999 81613
+
 We're excited to help you expand globally! 🎉"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -313,24 +323,23 @@ HUMAN HANDOFF RULE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 If the user asks to speak with a person, agent, human, or expert:
 1. If you don't have their name yet, ask: "Of course! May I have your name first so our team knows who to reach out to?"
-2. Once you have their name, ask: "Is there anything specific you'd like to share with our expert beforehand — like the country you're targeting or the type of service you need?"
-3. Then confirm: "Perfect! Our team will reach out to you shortly. You can also ping us directly at sales@complyglobally.com or call +1 (302) 214-1717 / +91 99999 81613. 😊"
+2. Once you have their name, ask: "Is there anything specific you'd like to share with our expert beforehand—such as the country you're targeting or the service you need?"
+3. Then confirm: "Perfect! Our team will reach out to you shortly. You can also contact us directly at sales@complyglobally.com or call +1 (302) 214-1717 / +91 99999 81613. 😊"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-RULES
+TONE & COMMUNICATION GUIDELINES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-- Keep replies short and clear (2-4 lines). Website chat, not an essay.
-- Warm, consultative tone — like a smart advisor, not a form.
-- First message: use the intro format above, then ask which country they are based in.
-- Collect info naturally through the flow of conversation.
-- If they ask about documents, mention the standard requirements above.
-- If they ask for contact details: sales@complyglobally.com | +1 (302) 214-1717 | +91 99999 81613
-- No specific legal/tax advice → "Our experts will guide you"
-- No prices → "Our team sends a custom quote based on your jurisdiction"
-- No guarantees on approvals`;
+- Keep replies concise (2-4 lines). This is a website chat, not an email exchange.
+- Use a warm, consultative tone—like a knowledgeable business advisor, never like a form or checklist.
+- Extract information naturally from the conversation flow; do not ask pointed questions in rapid succession.
+- If asked about documents, mention the standard requirements listed above.
+- If asked for contact details: sales@complyglobally.com | +1 (302) 214-1717 | +91 99999 81613
+- For specific legal or tax advice → respond with: "Our experts will guide you on the specifics"
+- For pricing questions → respond with: "Our team will send you a custom quote based on your jurisdiction and requirements"
+- Never guarantee approval timelines or outcomes`;
 
 // ─────────────────────────────────────────────
-// LEAD EXTRACTION  (FIX 2: hardened name detection)
+// LEAD EXTRACTION  (hardened name detection)
 // ─────────────────────────────────────────────
 
 // Words that must NEVER be captured as a name
@@ -345,7 +354,7 @@ const NAME_BLOCKLIST = new Set([
   'banking','finance','tax','compliance','secretarial','exim','import','export','residency','visa',
   'investment','advisory','annual','maintenance',
   // countries / regions (common ones)
-  'india','uae','dubai','usa','uk','singapore','canada','hongkong','germany','france',
+  'india','uae','dubai','abu dhabi','usa','uk','singapore','canada','hongkong','germany','france',
   'australia','netherlands','ireland','malta','cyprus','mauritius','bahrain','qatar',
   'kuwait','oman','saudi','nigeria','egypt','indonesia','thailand','malaysia','vietnam',
   'philippines','korea','japan','newzealand','ontario','delaware','wyoming','florida','nevada',
@@ -359,7 +368,7 @@ function extractLeadData(session, userMessage) {
   const lead = session.leadData;
   const msg  = userMessage.toLowerCase().trim();
 
-  // ── NAME (FIX 2: strict blocklist + structure guard) ──────────────────────
+  // ── NAME (strict blocklist + structure guard) ──────────────────────
   if (!lead.name) {
     const namePatterns = [
       /(?:my name is|i'm|i am|this is|call me|name's)\s+([A-Za-z]+(?:\s+[A-Za-z]+){0,2})/i,
@@ -397,7 +406,7 @@ function extractLeadData(session, userMessage) {
     }
   }
 
-  // ── COUNTRIES ─────────────────────────────────────────────────────────────
+  // ── COUNTRIES ─────────────────────────────────────────────────────────
   const countries = [
     'vietnam','india','uae','dubai','abu dhabi','usa','united states','america','uk','united kingdom','britain','england',
     'singapore','hong kong','canada','netherlands','holland','saudi arabia','saudi','mauritius','egypt','nigeria','indonesia',
@@ -428,7 +437,7 @@ function extractLeadData(session, userMessage) {
     if      (msg.match(/compan|incorporat|formation|register|llc|llp|pvt|entity|business setup|foreign|corpor/))
       lead.serviceNeeded = 'Foreign Corporation Formation';
     else if (msg.match(/bank|account|finance|payment/))
-      lead.serviceNeeded = 'Banking Setup';
+      lead.serviceNeeded = 'Banking & Finance';
     else if (msg.match(/tax|vat|gst|irs|filing|compliance|secretarial/))
       lead.serviceNeeded = 'International Tax & Secretarial Compliance';
     else if (msg.match(/exim|import|export|trade|customs/))
@@ -436,7 +445,7 @@ function extractLeadData(session, userMessage) {
     else if (msg.match(/invest|growth|capital|funding/))
       lead.serviceNeeded = 'Investment Advisory';
     else if (msg.match(/visa|residency|golden visa/))
-      lead.serviceNeeded = 'Residency / Golden Visa';
+      lead.serviceNeeded = 'Residency & Golden Visas';
     else if (msg.match(/annual|maintenance|renewal/))
       lead.serviceNeeded = 'Annual Maintenance';
     if (lead.serviceNeeded) console.log('📝 Service:', lead.serviceNeeded);
@@ -451,7 +460,7 @@ function extractLeadData(session, userMessage) {
     if (lead.businessStage) console.log('📝 Stage:', lead.businessStage);
   }
 
-  // ── TIMELINE ──────────────────────────────────────────────────────────────
+  // ── TIMELINE ──────────────────────────────────────────────────────────
   if (!lead.timeline) {
     const tm = msg.match(/(\d+)\s*(?:month|week|year)/);
     if (tm) {
@@ -467,7 +476,7 @@ function extractLeadData(session, userMessage) {
     if (lead.timeline) console.log('📝 Timeline:', lead.timeline);
   }
 
-  // ── DOCUMENTS ─────────────────────────────────────────────────────────────
+  // ── DOCUMENTS ─────────────────────────────────────────────────────────
   if (!lead.documentsRequired) {
     if (msg.match(/document|passport|bank|statement|pan|aadhar|business plan|capital/)) {
       lead.documentsRequired = 'Passport, Bank Statement, PAN, Aadhar, Business Plan, Capital Details';
@@ -475,7 +484,7 @@ function extractLeadData(session, userMessage) {
     }
   }
 
-  // ── HUMAN HANDOFF FLAG (FIX 3) ────────────────────────────────────────────
+  // ── HUMAN HANDOFF FLAG ────────────────────────────────────────────────────
   if (!session.humanRequested) {
     if (msg.match(/speak to|talk to|connect (me )?with|transfer|human|agent|person|expert|representative|real person|someone/)) {
       session.humanRequested = true;
@@ -492,6 +501,9 @@ function isCoreLeadComplete(lead) {
 // CLAUDE AI
 // ─────────────────────────────────────────────
 async function getClaudeReply(session, userMessage) {
+  // Mark that we've processed the first user message
+  session.isFirstMessage = false;
+
   session.history.push({ role: 'user', content: userMessage });
   if (session.history.length > 20) session.history = session.history.slice(-20);
 
