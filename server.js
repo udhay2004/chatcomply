@@ -1171,7 +1171,480 @@ If the user asks to speak with a person/agent/human/expert:
 1. If name missing: "Of course! May I have your name first so our team knows who to reach out to?"
 2. Once name known: "Is there anything specific you'd like to share — such as the country you're targeting or the service you need?"
 3. Then: "Perfect! Our team will reach out shortly. You can also contact us directly at sales@complyglobally.com or call +1 (302) 214-1717 / +91 99999 81613. 😊"
-
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — USA (Updated 2026 — Federal & State Compliance)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 
+COUNTRY SNAPSHOT (USA 2026):
+• GDP: ~USD 29 trillion (world's largest economy)
+• Indian-American community: 4.8+ million — highest-income ethnic group in the US
+• Major hubs: NYC (finance/media), Silicon Valley (tech/VC), LA (entertainment/trade), Houston/Dallas (energy/HQs), Boston (biotech), Seattle (cloud/tech), Austin (startups), Miami (LatAm gateway)
+• 60+ bilateral tax treaties including India-US DTAA (1989, 2006 protocol)
+ 
+CRITICAL: US is a FEDERAL SYSTEM — 50 states each have their own corporate laws, tax codes, and filing requirements. A company must "foreign qualify" in every state where it has nexus (employees, offices, inventory, significant sales).
+ 
+ENTITY TYPES FOR FOREIGN/INDIAN FOUNDERS:
+• C-Corporation: 21% federal CIT. Required for VC fundraising or IPO. Can issue preferred shares and stock options. QSBS: up to $10M capital gains excluded if held 5+ years. Double taxation applies (21% corporate + dividend WHT).
+• LLC (Single-Member, foreign-owned): Disregarded entity — no US corporate tax. 100% foreign ownership allowed. MUST file Form 5472 annually (penalty $25,000 per form per failure if missed — strictly enforced since 2017).
+• LLC (Multi-Member): Taxed as partnership (Form 1065). Flexible profit allocation.
+• S-Corporation: NOT available to foreign/Indian founders — requires all shareholders to be US citizens or permanent residents.
+• Branch Office: Parent (Indian company) fully liable for US branch income; subject to 30% Branch Profits Tax (reduced to 15% under India-US DTAA).
+ 
+STATE COMPARISON TABLE:
+State | CIT Rate       | Key Advantage                     | Best For
+DE    | 8.7% (nexus)   | Court of Chancery; DGCL; VC       | VC-funded startups; holding cos
+WY    | 0%             | No CIT; privacy; $62/yr fee       | LLCs; holding cos; privacy
+NV    | 0% (GRT)       | No CIT; asset protection           | Asset protection; gaming
+CA    | 8.84%          | Largest market; tech ecosystem     | Tech cos operating in CA
+NY    | 6.5-7.25%      | Financial/media capital            | Finance; media; large enterprises
+TX    | 0% (margin)    | Large market; energy               | Energy; manufacturing; HQs
+FL    | 5.5%           | No personal income tax; ports      | LatAm trade; logistics
+WA    | 0% (B&O)       | No personal income tax; tech       | Tech; cloud; Amazon ecosystem
+NM    | 0% franchise   | Absolute cheapest state            | Digital business; cost minimize
+ 
+ANNUAL STATE FEES:
+• Delaware Corp: $400 minimum (can reach $50,000–$200,000+ via Authorized Shares Method — use Assumed Par Value method to reduce). Delaware LLC: $300/year flat.
+• Wyoming LLC: $62/year flat — most cost-effective
+• Nevada LLC: $200/year + mandatory state business license
+• Florida LLC: $138.75 annual report (no franchise tax for LLCs)
+• New Mexico LLC: $0 annual report, no franchise tax — absolute cheapest
+ 
+FEDERAL CORPORATE TAX (2026):
+• C-Corp federal CIT: 21% flat on worldwide income
+• Pass-through (LLC): 0% entity level; 10-37% individual
+• Corporate AMT (CAMT): 15% on AFSI for large corporations
+• BEAT (Base Erosion): 10% anti-base erosion tax on deductible payments to related foreign persons
+• GILTI: 10.5% effective rate on global intangible low-taxed income of CFCs
+• FDII: 13.125% effective rate on foreign-derived intangible income (export incentive)
+• Branch Profits Tax: 30% (treaty: 15% under India-US DTAA)
+• Bonus Depreciation: 100% (permanent OBBBA) — immediate expensing of qualifying assets
+• Section 179 expensing: max $2.56M (2026), phaseout starts at $4.09M
+ 
+WITHHOLDING TAX — INDIA-US DTAA RATES:
+• Dividends (10%+ ownership): 30% domestic → 15% treaty
+• Dividends (portfolio): 30% domestic → 25% treaty
+• Interest (general): 30% domestic → 15% treaty
+• Interest (bank/financial): 30% domestic → 10% treaty
+• Royalties (general): 30% domestic → 15% treaty
+• Royalties (equipment): 30% domestic → 10% treaty
+• Fees for Included Services: 30% domestic → 15% treaty (if "make available" test met)
+• Branch Profits Tax: 30% domestic → 15% treaty
+ 
+SALES TAX — WAYFAIR NEXUS:
+• No federal sales tax. 45 states + DC levy their own (0% to 7.25%+ base rate).
+• Post-Wayfair (2018): states can impose sales tax on remote sellers meeting economic nexus thresholds (typically ~$100K sales or 200 transactions in the state).
+• Indian companies selling online to US customers must assess state sales tax nexus from day one.
+• Tools: Avalara, TaxJar for multi-state compliance.
+ 
+EMPLOYMENT & IMMIGRATION FOR INDIAN NATIONALS:
+• H-1B: specialty occupation visa (lottery-based annual cap, employer-sponsored)
+• L-1: intra-company transfer (executives, managers, specialized knowledge)
+• O-1: extraordinary ability
+• E-2: treaty investor — NOT available to Indian nationals (India has no E-2 treaty with US)
+• EB-5: immigrant investor (green card)
+• Federal minimum wage: $7.25/hour (many states require more)
+• FICA (2026): Social Security 6.2% employer + 6.2% employee on wages up to $184,500; Medicare 1.45% each (no wage cap)
+ 
+BANKING FOR FOREIGN FOUNDERS (no SSN required):
+• Mercury (Fintech): No SSN, no in-person, EIN only, $0/month — BEST OVERALL
+• Relay (Fintech): No SSN, multiple sub-accounts, $0–$30/month
+• Brex (Fintech): No SSN, great for spend management
+• Wise Business: No SSN, best for FX transfers
+• Chase/Bank of America: SSN preferred, often requires in-person — not feasible remotely
+ 
+EIN (Federal Tax ID) FOR FOREIGN NATIONALS:
+• Method 1 (Fastest): Call IRS International +1 (267) 941-1099, Mon–Fri 6am–11pm ET — get EIN same day
+• Method 2 (4–6 weeks): Complete IRS Form SS-4, fax to +1 (304) 707-9471
+• Method 3: Via registered agent or formation service ($50–$150)
+ 
+FORM 5472 — MOST DANGEROUS COMPLIANCE TRAP:
+• Foreign-owned SMLLC must file Form 5472 + pro forma Form 1120 annually
+• Due April 15 (or September 15 with extension)
+• Reports all transactions between owner and LLC (capital contributions, distributions, loans)
+• Penalty: $25,000 per form per year — actively enforced since 2017
+ 
+KEY ANNUAL COMPLIANCE DEADLINES (US):
+• Jan 31: W-2s to employees; 1099s to contractors; Form 941 Q4
+• Mar 1: Delaware Franchise Tax + Annual Report due (corporations)
+• Apr 15: Federal C-Corp return (Form 1120) + Form 5472; FBAR due; state CIT returns (most states)
+• Jun 1: Delaware LLC Annual Tax ($300)
+• Jun 15: 2nd quarter estimated federal CIT
+• Sep 15: 3rd quarter estimated; Extended S-Corp/Partnership returns
+• Oct 15: Extended federal C-Corp return (Form 1120); Extended FBAR
+• Dec 31: End of US federal tax year; Indian parent APR to RBI due
+ 
+POST-INCORPORATION CHECKLIST (USA):
+• Obtain EIN (IRS phone +1-267-941-1099)
+• Monitor FinCEN BOI rules (current interim rule exempts US-formed entities; rules can change — verify before filing)
+• Open Mercury or Relay business bank account
+• Draft Operating Agreement (LLC) or Bylaws (Corp)
+• Set up bookkeeping: QuickBooks, Xero, or Wave
+• Register for state sales tax where economic nexus exists (Avalara or TaxJar recommended)
+• Engage US CPA for annual filings (Form 5472 / 1120 / 1065)
+• Apply for ITIN to claim tax treaty benefits
+• File FEMA ODI (Form FC through AD bank in India) before first capital remittance
+ 
+DATA PRIVACY (USA):
+• No single federal privacy law. Complex patchwork: HIPAA (healthcare), GLBA (financial), COPPA (children under 13), FERPA (education)
+• State privacy laws (20+ states as of 2026): California CCPA/CPRA (most comprehensive — applies to >$25M revenue or processing data of 100K+ CA consumers), Virginia VCDPA, Colorado CPA, Texas TDPSA, and growing list of state laws
+• Indian companies serving US consumers must map which state laws apply based on customer locations and revenue thresholds
+ 
+COMPLIANCE PENALTY MATRIX (USA):
+• Form 1120 (CIT) late filing: 5% of unpaid tax per month (max 25%) + interest
+• Form 5472 late/non-filing: $25,000 per return per failure (strict liability)
+• Form 941 (Payroll) late deposit: 2-15% penalty on deposits + interest
+• Delaware Franchise Tax late payment: $200 penalty + 1.5% monthly interest; risk of dissolution
+• Delaware Annual Report non-filing: voiding of corporate charter after 2 years
+• Sales tax non-filing: back taxes + penalties + interest; personal liability possible
+• Employment tax (FICA) non-deposit: Trust fund recovery penalty (100% of unpaid tax)
+• State privacy law (CCPA) violation: $2,500-7,500 per intentional violation; private right of action for data breaches
+• Transfer pricing non-arm's length: 20-40% penalty + interest
+• FCPA violation: criminal up to $250K fine + imprisonment; civil: disgorgement + penalties
+ 
+CFIUS (FOREIGN INVESTMENT REVIEW):
+• Mandatory filings for investments in critical technologies (TID US businesses), critical infrastructure (telecom, energy, water, financial), or sensitive personal data of US citizens
+• Restricted sectors: domestic airlines (25% foreign voting equity cap), banking (regulator approval required), broadcasting/telecom (FCC restrictions), maritime shipping (Jones Act), nuclear energy, government contractors
+ 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — PHILIPPINES (Entry Philippines Guide 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 
+COUNTRY SNAPSHOT (Philippines 2026):
+• GDP: ~USD 435 billion (2024); upper middle-income emerging economy
+• Population: 115+ million; median age ~26 years; literacy rate >96%; English widely spoken in business and government
+• Key hubs: Metro Manila (NCR — primary), Cebu, Clark/Subic, Davao
+• Services = ~60% of GDP; world leader in BPO/IT-BPM
+• Member of ASEAN, APEC, WTO; 43+ Double Tax Agreements (DTAs) including India, US, Japan, Singapore, UK, Germany, China
+• Philippine Peso (PHP) is the national currency
+• Regulatory bodies: SEC (corporate registration), BIR (tax), BSP (central bank/forex), BOI, PEZA, ARTA
+ 
+WHY PHILIPPINES FOR FOREIGN/INDIAN BUSINESSES:
+• Large consumer market (115M people), young English-proficient workforce
+• Competitive labor costs; strategic Southeast Asian location
+• Growing digital economy; global leader in BPO/IT-BPM
+• PEZA and BOI offer major tax incentives (income tax holidays, 5% special CIT in lieu of all taxes)
+• Progressive FDI liberalization under RA 11647 (2022) and RA 11659 (Public Service Act)
+• 100% foreign ownership now permitted in most sectors except those on the Foreign Investment Negative List (FINL)
+ 
+ENTRY TIMELINES (Philippines):
+• Foreign-owned corporation setup: 4-8 weeks (SEC registration, BIR enrollment, LGU permits)
+• PEZA-registered entities: additional 4-6 weeks for zone accreditation
+• Setup cost: USD 3,000 to USD 10,000 depending on structure and complexity
+• ARTA mandates processing time limits: 3 working days (simple), 7 (complex), 20 (highly technical)
+ 
+BUSINESS STRUCTURES:
+Structure         | Min Capital     | Tax Treatment        | Notes
+Subsidiary (100%) | USD 200,000*    | 25% CIT on PH income | Most common; PEZA/BOI eligible
+Branch Office     | USD 200,000     | 25% CIT + 15% BPRT   | Parent fully liable
+Rep/Liaison Office| USD 30,000/yr   | Exempt (no income)   | Liaison only; no revenue
+ROHQ              | USD 200,000     | Special rates         | Qualifying services to affiliates
+ 
+*Reduced to USD 100,000 if technology-intensive or employs at least 50 Filipino workers
+ 
+FOREIGN INVESTMENT NEGATIVE LIST (FINL):
+• List A: Restricted by Constitution/law (e.g., mass media, small-scale mining, private security agencies — specific equity caps)
+• List B: Restricted for security/defense/health/morals — Filipino ownership required if paid-up capital < USD 200,000
+• RA 11659 (2022) liberalized public utilities — up to 100% foreign in non-critical utilities
+• Advertising: 30% foreign equity cap remains
+• Land: foreign nationals CANNOT own land; long-term leases up to 75 years permitted; condominiums up to 40% of building
+ 
+CORPORATE INCOME TAX (Philippines):
+Entity Type              | Rate  | Tax Base              | Notes
+Domestic Corporation     | 25%   | Worldwide income      | Standard
+Small Domestic Corp      | 20%   | Net taxable income    | Net income ≤ PHP 5M AND total assets ≤ PHP 100M
+Resident Foreign Corp    | 25%   | PH-sourced income     | Engaged in trade/business in PH
+Non-Resident Foreign     | 25%   | Gross PH income       | WHT-based collection
+PEZA-registered          | 5% GIT| Gross income          | In lieu of ALL national and local taxes
+BOI (ITH period)         | 0%    | N/A                   | 4-7 year income tax holiday
+ 
+VAT (Philippines):
+• Standard rate: 12%
+• VAT registration mandatory when annual gross sales/receipts exceed PHP 3 million
+• Export sales: zero-rated (0%)
+• VAT-exempt: agricultural products in original state, educational services, residential leases <PHP 15,000/month
+• Input VAT credited against output VAT
+ 
+WITHHOLDING TAX RATES (Philippines):
+Payment Type             | Domestic | Non-Resident | Treaty Range
+Dividends                | 10% final| 25% final    | 5-15% (treaty)
+Interest                 | 20% final| 25% final    | 10-15% (treaty)
+Royalties                | 20% final| 25% final    | 10-25% (treaty)
+Management/Technical Fees| 5-15% CWT| 25%         | Treaty may reduce
+Branch Profit Remittance | N/A      | 15%          | May be reduced by treaty
+ 
+CREATE MORE ACT INCENTIVES (RA 12066):
+• Income Tax Holiday (ITH): 4-7 years for qualifying Registered Business Enterprises (RBEs)
+• Special Corporate Income Tax (SCIT): 5% of gross income earned for 10 years after ITH (in lieu of all national and local taxes)
+• Enhanced Deductions: additional 50-100% on power, labor, R&D, training, domestic input expenses
+• Import duty exemption on capital equipment and raw materials
+• VAT zero-rating on local purchases for qualifying RBEs
+• Priority sectors under SIPP: IT-BPM/BPO, manufacturing, agribusiness, renewable energy, electric vehicles, healthcare, creative industries
+ 
+PEZA ZONES (Philippines):
+• PEZA operates 400+ economic zones: IT Parks/Centers (BPO/IT companies), Manufacturing Economic Zones, Agro-Industrial Zones, Tourism Zones
+• Notable zones: Clark Freeport Zone, Subic Bay Freeport, Cebu IT Park, Laguna Technopark
+• Metro Manila key districts: Makati CBD, Bonifacio Global City (BGC/Taguig), Ortigas Center
+ 
+INCORPORATION PROCESS (Philippines):
+1. SEC name verification via eSPARC system (1-2 days)
+2. Prepare Articles of Incorporation and By-Laws (3-5 days)
+3. Open bank account and deposit paid-up capital (3-7 days)
+4. File with SEC and obtain Certificate of Incorporation (3-8 days)
+5. Obtain Barangay Clearance (1-2 days)
+6. Obtain Mayor's Permit/Business Permit from LGU (5-10 days)
+7. Register with BIR — TIN + Certificate of Registration Form 2303 (3-5 days)
+8. Register books of accounts with BIR (1-2 days)
+9. Register with SSS, PhilHealth, Pag-IBIG (2-5 days)
+10. Register with DOLE if hiring employees (1-2 days)
+ 
+EMPLOYMENT & PAYROLL (Philippines):
+• 8-hour work day / 48-hour work week; overtime at 25% (30% on holidays)
+• 13th month pay: MANDATORY (1/12 of annual basic salary, paid before Dec 24)
+• Minimum 5 days Service Incentive Leave (SIL)
+• SSS employer contribution: 8.5-9.5% of monthly salary credit
+• PhilHealth: total 5% of basic salary (employer + employee share equally)
+• Pag-IBIG: 2% of basic salary (employer contribution capped PHP 200/month)
+• Termination: requires just or authorized cause + due process; severance 1/2 to 1 month per year of service
+ 
+IMMIGRATION FOR FOREIGN NATIONALS (Philippines):
+• Alien Employment Permit (AEP): from DOLE — standard route (~2 weeks processing)
+• 9(g) Pre-Arranged Employment Visa: for longer-term employment (2-3 months processing)
+• Special Investor's Resident Visa (SIRV): for investments ≥ USD 75,000
+• PEZA Working Visa: for employees of PEZA-registered companies
+• Special Visa for Employment Generation (SVEG)
+ 
+BANKING (Philippines):
+• Major banks: BDO, BPI, Metrobank, Landbank; Foreign banks: Citibank, HSBC, Standard Chartered
+• Required: SEC Certificate of Registration, Articles of Incorporation, Board Resolution, BIR Form 2303, valid IDs + passports of signatories and UBOs, proof of address
+• BSP registration required for full repatriation rights at prevailing exchange rate
+ 
+DATA PROTECTION (Philippines):
+• Data Privacy Act of 2012 (RA 10173), enforced by National Privacy Commission (NPC)
+• Registration required for data processing systems handling >1,000 individuals
+• Data Protection Officer (DPO) appointment mandatory
+• Breach notification within 72 hours to NPC and affected individuals
+• Cross-border transfers permitted with adequate protection or NPC-approved safeguards
+• Penalties: PHP 500K – 5M fine + imprisonment for violations
+ 
+COMPLIANCE CALENDAR (Philippines — Key Deadlines):
+• Jan 20: Mayor's Permit renewal deadline (LGU)
+• Jan 31: Annual Registration Fee (BIR 0605); Annual Info Return 1604-C and 1604-F with Alphalists
+• Mar 1: Annual Info Return - Creditable WHT (BIR 1604-E)
+• Apr 15: Annual Income Tax Return (BIR 1702); Transfer Pricing documentation due
+• Apr 30: Audited Financial Statements filing with SEC (for Dec fiscal year-end)
+• Within 30 days of AGM: General Information Sheet (GIS) to SEC
+• Monthly (10th): WHT on Compensation, EWT, FWT
+• Monthly (20th): Monthly VAT Declaration
+• Monthly (last day): SSS, PhilHealth, Pag-IBIG contributions
+• Quarterly (60 days after quarter): Quarterly Income Tax Return; Quarterly VAT Return (25th day after quarter)
+ 
+COMPLIANCE PENALTIES (Philippines):
+• Income Tax Return late filing: 25% surcharge + 12% interest p.a. + compromise penalty
+• VAT return late: 25% surcharge + 12% interest p.a.
+• Withholding Tax late remittance: 25% surcharge + 12% interest + possible criminal liability
+• Books of Accounts failure: PHP 10,000 – 50,000 + closure risk
+• SEC Annual Filings (GIS/AFS) late: monetary penalty per day of delay
+• Business Permit operating without: closure order + fines from LGU
+• SSS contributions late: 3% monthly penalty
+• PhilHealth late: 2% monthly penalty
+• Data Privacy violation/breach: PHP 500K – 5M fine + imprisonment
+ 
+EXIT OPTIONS (Philippines):
+• Share sale: 15% capital gains tax on shares of non-listed domestic corporations
+• Voluntary dissolution: requires 2/3 stockholder vote + SEC approval
+• Cross-border mergers possible under Revised Corporation Code (RA 11232)
+ 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — THAILAND (Entry Thailand Guide 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 
+COUNTRY SNAPSHOT (Thailand 2026):
+• GDP: ~USD 575 billion (2025); ASEAN's 2nd-largest economy (after Indonesia)
+• Population: 71.7 million; well-educated; improving English proficiency
+• Currency: Thai Baht (THB); GDP growth ~2-3%; inflation ~1-2%
+• Key hubs: Bangkok (finance/commerce); Eastern Economic Corridor/EEC — Chonburi, Rayong, Chachoengsao (high-tech manufacturing); Chiang Mai (tech/creative); Phuket (tourism)
+• Indian community: 25,000+; major Indian companies (Tata, Mahindra, Reliance, L&T, Birla) have Thailand operations
+• India-Thailand DTAA: originally 1986, comprehensively revised 2015 (effective Jan 1, 2016)
+• Trade: ASEAN member; RCEP (2022); ASEAN-India FTA/AIFTA (2010); 61 Double Tax Treaties
+• CRITICAL 2026 CHANGE: DBD Biz Regist digital platform MANDATORY from 1 January 2026 — all physical company registrations discontinued
+• World's 10th largest automotive producer; major manufacturing hub for electronics, hard disk drives
+ 
+WHY THAILAND FOR INDIAN BUSINESSES:
+• ASEAN's 2nd-largest economy; strategic Southeast Asian hub
+• BOI incentives: up to 13 years CIT exemption for promoted activities
+• Eastern Economic Corridor (EEC) — enhanced incentives for EV, digital, biotech, robotics, aerospace
+• Consumer market of 72 million + 30M+ tourists annually
+• Strong India-Thailand ties via AIFTA and revised DTAA
+• No withholding tax advantage on dividends under DTAA (10%)
+ 
+CRITICAL: FOREIGN BUSINESS ACT (FBA) — OWNERSHIP RESTRICTIONS:
+• A company is "foreign" if 50%+ shares held by non-Thais
+• FBA restricts majority foreign ownership in three lists:
+  - List 1: Strictly prohibited (newspapers, rice farming, land trading)
+  - List 2: Requires Cabinet approval (domestic transport, mining, manufacturing of firearms)
+  - List 3: Requires Foreign Business Licence (FBL) from DBD (most professional services, wholesale, retail, construction, tourism services)
+• Standard structure without BOI/FBL: 49% foreign / 51% Thai — most common for non-qualifying activities
+• DBD Order 2/2568 (effective 1 Jan 2026): Thai shareholders MUST provide 3 months' bank statements proving financial capacity — specifically targets nominee shareholder arrangements. Also applies to companies where a foreign national holds authorised director/signatory authority.
+• 2026: Thailand removed 10 business categories from FBA restrictions
+ 
+PATHWAYS TO 100% FOREIGN OWNERSHIP (Thailand):
+1. BOI Promotion (most common and recommended for high-tech/strategic sectors)
+2. Foreign Business Licence (FBL) from DBD — discretionary, takes 4-6 months
+3. Industrial Estate Authority of Thailand (IEAT) incentives
+4. US-Thailand Treaty of Amity — available ONLY to US companies, NOT Indians
+ 
+BOI (Board of Investment) — ESSENTIAL FOR INDIAN BUSINESSES:
+• BOI-promoted companies: 100% foreign ownership + major tax benefits
+• CIT exemption: 3-13 years (EEC activities get maximum — up to 13 years + 50% reduction for 5 more years)
+• Import duty exemptions on machinery and raw materials for export
+• Land ownership rights for BOI-promoted activities (normally foreigners cannot own Thai land)
+• Unrestricted capital and dividend repatriation
+• Smart Visa (up to 4 years) for foreign professionals in BOI activities
+• LTR Visa (10 years) for qualifying investors and skilled professionals
+• 2023-2027 BOI priorities: Bio-Circular-Green (BCG) economy, EVs, digital/electronics, advanced manufacturing, medical, creative industries
+• EEC industries: next-gen automotive (EV), smart electronics, advanced tourism, agribusiness, food, robotics, aviation, biofuels, digital, medical hub
+ 
+CORPORATE INCOME TAX (Thailand 2026):
+Taxpayer/Profit Band              | CIT Rate     | Notes
+Standard (most companies)         | 20%          | Flat rate on net taxable profits
+SME — first THB 300,000 profit    | 0%           | SME = paid-up capital ≤ THB 5M AND revenue ≤ THB 30M
+SME — THB 300,001–3,000,000       | 15%          | Progressive for qualifying SMEs
+SME — above THB 3,000,000         | 20%          | Standard rate
+BOI-promoted activities           | 0%           | CIT exemption during promotion (3-13 years)
+Special Economic Zones            | 10%          | 10 consecutive accounting periods (approved 2025)
+International Business Center     | 3-8%         | Based on local expenditure
+Pillar Two Top-up Tax             | 15% minimum  | Large MNEs, consolidated revenue >EUR 750M (from 2025)
+ 
+VAT (Thailand 2026):
+• Standard rate: 7% (currently extended by Royal Decree No. 799 until 30 September 2026 — may revert to 10% statutory rate after Sep 30, 2026 — IMPORTANT planning point)
+• Registration mandatory when annual revenue exceeds THB 1.8 million
+• Exports: zero-rated (0%)
+• Monthly VAT returns (PP.30) due by 15th of following month (23rd if e-filing)
+• Foreign digital service providers with >THB 1.8M revenue from Thai customers must register for VAT (since 2021)
+• From 18 Feb 2025: VAT applies to low-value imports (<THB 1,500) through e-commerce platforms
+ 
+WITHHOLDING TAX RATES — INDIA-THAILAND DTAA (revised 2015):
+Payment Type                | Thai Domestic Rate | To Indian Residents (DTAA)
+Dividends                   | 10% final WHT      | 10% (same — capped under DTAA)
+Interest (general)          | 15% final WHT      | 10% (capped under DTAA)
+Royalties                   | 15% final WHT      | 10% (capped under DTAA)
+Service fees (to companies) | 3% creditable      | Business profits rules apply
+Rent (immovable property)   | 5% creditable      | 10% DTAA if real property
+Branch Profit Remittance    | 10% final          | Reduced under DTAA for Indian residents
+ 
+BUSINESS STRUCTURES (Thailand):
+Structure                   | Foreign Cap | CIT           | Notes
+Ltd Co (49% foreign)        | 49% FBA cap | 20%           | Standard; genuine 51% Thai shareholders needed
+BOI-promoted Ltd (100%)     | Up to 100%  | 0% for 3-13yr | Best path for eligible activities
+Branch Office (FBL needed)  | 100%        | 20% on Thai   | THB 3M min capital; FBL required
+Representative Office       | N/A         | None          | Non-revenue; liaison/market research only
+International Business Ctr  | 100%        | 3-8%          | Treasury/service functions for MNCs
+ 
+MINIMUM CAPITAL (Thailand):
+• THB 2 million per foreign work permit — CRITICAL. Need 4 foreign staff = THB 8M minimum paid-up capital.
+• Branch office: THB 3 million
+• Representative office: THB 3 million (across 5 years)
+ 
+INCORPORATION PROCESS (Thailand — 2026):
+1. Name reservation via DBD Biz Regist platform (mandatory digital — same day)
+2. Prepare MOA, AOA, Shareholders' List, Directors' Forms (3-5 days)
+3. File MOA registration via DBD Biz Regist (same day)
+4. Hold Statutory Meeting; adopt AOA; appoint directors/auditor (same day)
+5. File Company Registration online via DBD Biz Regist (1-3 days)
+6. Apply for BOI promotion if eligible — STRONGLY RECOMMENDED (4-8 weeks)
+7. Apply for FBL if 100% foreign and no BOI (4-6 months — rarely used)
+8. Register for tax ID and VAT with Revenue Department (1-2 weeks)
+9. Register with Social Security Office (within 30 days of first hire)
+10. Open Thai bank account — LONGEST STEP (4-12 weeks)
+11. Apply for Work Permits and Non-Immigrant B Visas for foreign staff (2-6 weeks each)
+ 
+TOTAL TYPICAL TIMELINE:
+• Limited Company (49% foreign): 2-4 weeks registration + 4-12 weeks banking = 6-16 weeks operational
+• BOI-promoted company: 4-8 weeks BOI + registration + 4-12 weeks banking = 10-24 weeks
+ 
+BANKING IN THAILAND:
+• Typical time for foreign-owned entities: 4-12 weeks — the longest step
+• In-person visits often required; rigorous AML/KYC
+• Required: DBD Bor Or Jor 5 & 6, MOA/AOA, shareholders' and directors' lists, board resolution, ID for directors and UBOs, proof of Thai registered office, business plan, source of funds, parent company docs (legalized/apostilled from India)
+• Major Thai banks: Bangkok Bank (BBL), Kasikornbank (KBANK), SCB, Krungthai Bank (KTB), Bank of Ayudhya (BAY)
+• International banks: HSBC, Standard Chartered, Citi Thailand
+• BOI certification and physical Thai presence significantly improve bank approval chances
+ 
+EMPLOYMENT & PAYROLL (Thailand):
+• Standard work week: 48 hours (8 hours/day, 6 days) or 40-45 hours in office/commercial work
+• Minimum 6 days paid annual leave (increases with tenure)
+• Statutory minimum wage: ~THB 354-400/day in 2026 (varies by province)
+• SSS: 5% employer + 5% employee on salary capped at THB 15,000/month (max THB 750 each)
+• Workmen's Compensation Fund: 0.2-1.0% of payroll (employer only)
+• Annual statutory audit: MANDATORY for ALL Thai limited companies regardless of size
+• Accounting records: must be maintained in Thai language; retained minimum 5 years
+• Monthly WHT returns (PND.1, PND.3/53): due 7th of following month (15th if e-filing)
+• Annual PIT summary (PND.1Kor): due by end of February
+ 
+IMMIGRATION FOR INDIAN NATIONALS (Thailand):
+1. Non-Immigrant B Visa + Work Permit: standard route
+   - THB 2M paid-up capital required per foreign work permit
+   - 4:1 Thai-to-foreign employee ratio (non-BOI companies)
+   - Minimum salary for Indians: ~THB 50,000/month
+2. BOI Visa + Work Permit: streamlined for BOI-promoted companies; faster e-WP/e-Visa; no strict 4:1 ratio
+3. Smart Visa: for experts, executives, investors, startups in 13 target industries (up to 4 years, no separate work permit needed for associated employment)
+4. Long-Term Resident (LTR) Visa: 10 years for wealthy global citizens, wealthy pensioners, work-from-Thailand professionals, highly skilled professionals
+5. Elite Visa: 5-20 years for high-net-worth individuals
+ 
+COMPLIANCE CALENDAR (Thailand — Key Dates):
+• Monthly (7th/15th): PND.1 (PIT WHT), PND.3/53 (Corporate WHT) — 7th deadline extends to 15th for e-filing
+• Monthly (15th/23rd): VAT return PP.30 — 15th extends to 23rd for e-filing
+• Monthly (15th): SSS contributions
+• February (mid-Feb): Issue Withholding Tax Certificates (50 Bis) to employees
+• Feb 28/29: PND.1Kor annual PIT summary
+• March 31: Individual PIT returns (PND.90/91)
+• April 30: AGM deadline for December fiscal year-end companies (within 4 months of FY end)
+• May 14: BJ.5 List of Shareholders filing with DBD (within 14 days of AGM)
+• May 31: PND.50 Annual CIT Return for December FY companies (within 150 days)
+• August 31: PND.51 Half-year CIT Prepayment for December FY companies
+• September 30: VAT 7% rate reduction expires — watch for Royal Decree extension
+ 
+REPATRIATION FROM THAILAND:
+• Dividend: 10% final WHT (10% under India-Thailand DTAA — same rate, but payable)
+• Interest: 15% WHT (10% under DTAA)
+• Royalty: 15% WHT (10% under DTAA)
+• Foreign Exchange Transaction Form required for amounts >USD 200,000
+• BOI-promoted companies: unrestricted capital and dividend repatriation
+• Indian parent: must comply with FEMA ODI reporting, claim FTC under Section 90/Rule 128
+ 
+KEY RISKS FOR THAILAND (INDIANS):
+• FBA nominee shareholder arrangements: ILLEGAL — imprisonment up to 3 years + THB 100K-1M fine + company dissolution
+• DBD Order 2/2568: Thai shareholders must provide bank statements from Jan 1, 2026 — nominees cannot comply
+• BOI condition non-compliance: withdrawal of benefits + retrospective tax collection
+• Pillar Two Top-up Tax for large MNE groups (>EUR 750M consolidated revenue — effective 2025)
+• PDPA data privacy compliance — fines up to THB 5M admin + THB 1M criminal
+• Strict labour dismissal rules: requires just cause + severance payment
+• Transfer pricing documentation required (Master File, Local File, CbCR for large groups)
+• Lese-Majeste laws strictly enforced — cultural awareness critical
+ 
+COMPLIANCE PENALTIES (Thailand):
+• FBA Nominee Shareholding: imprisonment up to 3 years + THB 100K-1M fine + company dissolution
+• FBA operation without licence: imprisonment up to 3 years + THB 100K-1M + THB 10K-50K daily fine
+• Annual Accounts late/failure: director fines up to THB 50,000 each
+• CIT Return (PND.50) late filing: THB 1,000-2,000 fine + 1.5% monthly interest on unpaid tax
+• VAT PP.30 late filing: THB 2,000 per return + 1.5% monthly interest
+• PDPA violation/breach: admin fines up to THB 5M + criminal THB 1M + compensation to data subjects
+• Social Security non-payment: 2% monthly surcharge + up to 200% penalty
+• Work Permit violation (foreign employee without WP): THB 50K-100K fine + employer fines + deportation
+• BOI Conditions non-compliance: withdrawal of all benefits + retrospective tax collection
+ 
+SPECIAL ECONOMIC ZONES (Thailand):
+• EEC (Eastern Economic Corridor) — Chonburi, Rayong, Chachoengsao: flagship zone for S-Curve industries (EV, smart electronics, advanced tourism, robotics, aviation, digital, medical hub). Enhanced BOI: 13-year CIT exemption + 50% reduction 5 more years; 17% flat PIT for target industry experts; streamlined work permits/visas.
+• Border SEZs (10 zones along Thai borders): 10% CIT rate for targeted businesses for 10 consecutive periods (approved 2025)
+• 70+ Industrial Estates: operated by IEAT and private operators (Amata, WHA, Hemaraj) — plug-and-play infrastructure for BOI-promoted manufacturers
+ 
+DATA PROTECTION (Thailand):
+• Personal Data Protection Act (PDPA) B.E. 2562 — in full effect since 1 June 2022; closely mirrors EU GDPR
+• Lawful basis required for processing; transparent privacy notices; data subject rights (access, rectification, erasure, portability, objection, restriction)
+• Breach notification to PDPC within 72 hours
+• DPO required for public authorities, large-scale regular monitoring, or large-scale special categories
+• Cross-border transfers: adequacy or appropriate safeguards (SCCs, BCRs) required
+• Max penalties: THB 5M administrative + THB 1M criminal + compensation liability
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 DOCUMENT REQUIREMENTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
