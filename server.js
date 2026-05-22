@@ -1645,6 +1645,478 @@ DATA PROTECTION (Thailand):
 • DPO required for public authorities, large-scale regular monitoring, or large-scale special categories
 • Cross-border transfers: adequacy or appropriate safeguards (SCCs, BCRs) required
 • Max penalties: THB 5M administrative + THB 1M criminal + compensation liability
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — ESTONIA (Entry Estonia Guide 2026 — e-Residency & EU Gateway)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+COUNTRY SNAPSHOT (Estonia 2026):
+• Population: ~1.37 million; EU/EEA/Eurozone/NATO/OECD member
+• Capital: Tallinn; also Tartu (university/R&D hub)
+• Currency: Euro (EUR); Schengen Area member
+• Famous startups: Skype, Wise, Bolt, Pipedrive, Veriff, Playtech
+• India-Estonia DTAA: in force since June 20, 2012; dividends/interest/royalties/FTS all capped at 10%
+• e-Residency program: 140,000+ e-residents from 180+ countries; India among active markets
+
+WHY ESTONIA / e-RESIDENCY FOR INDIAN BUSINESSES:
+• UNIQUE: 0% corporate income tax on RETAINED/REINVESTED profits — only pay 22/78 when you distribute
+• 100% online company formation via e-Residency (no physical presence in Estonia required)
+• Full EU company status — sell across EU/EEA, access SEPA payments, EU VAT OSS, EU funding programs
+• EU trademark (EUTM) and IP protection via EUIPO covering all 27 EU member states
+• English-friendly administration; strong startup ecosystem
+• Low ongoing compliance cost: ~EUR 100-300/month for service provider (accounting + registered address)
+• Ideal for: Indian SaaS companies, IT services exporters, freelancers, consultants, digital businesses
+
+e-RESIDENCY — WHAT IT IS AND IS NOT:
+• e-Residency IS: a government-issued digital identity (EUR 150 fee in 2026); allows online company registration, digital document signing under eIDAS, access to e-Tax Board and e-Business Register
+• e-Residency is NOT: citizenship, physical residency, a visa, or a travel document
+• e-Residency does NOT grant: right to live/work in Estonia/EU, tax residency in Estonia, Schengen access
+• YOUR Estonian OÜ is an Estonian tax-resident entity; YOU remain an Indian tax resident on worldwide income
+• This distinction is CRITICAL for FEMA ODI compliance on the Indian side
+
+e-RESIDENCY APPLICATION PROCESS:
+1. Apply online at e-resident.gov.ee (EUR 150 state fee; passport, photo, motivation statement) — 30 minutes
+2. Background check by Estonian Police and Border Guard Board — 3-8 weeks
+3. Collect e-Residency kit at an official pickup point (Estonian embassy/consulate or approved location)
+4. Install ID card software; use digital services immediately
+
+INCORPORATION (Estonian OÜ via e-Residency):
+• OÜ (Osaühing) = Private Limited Company — the recommended entity type for all e-residents
+• Minimum share capital: EUR 0.01 per shareholder (founders remain liable for unpaid portion if below EUR 2,500)
+• Minimum 1 shareholder (any nationality); minimum 1 management board member (any nationality, no residency required)
+• Mandatory for e-resident companies: legal address + licensed contact person in Estonia (service provider)
+• State registration fee: EUR 265 for electronic incorporation via e-Business Register
+• Typical total setup cost: EUR 500-2,000 (state fees + service provider + virtual office)
+• Timeline: OÜ registration — a few hours to a few business days once e-Residency card obtained
+• Service providers: Xolo, 1Office, Enty, Companio and others from the e-Residency Marketplace
+
+OTHER STRUCTURES (less common for e-residents):
+• AS (Aktsiaselts / Public Limited Company): min EUR 25,000 capital; supervisory board required; for listing
+• Branch Office: extension of Indian parent; requires registration; less common
+• FIE (Sole Proprietor): no limited liability; not suitable for foreign entrepreneurs
+
+TAXATION — ESTONIA'S UNIQUE DISTRIBUTION-BASED SYSTEM:
+Tax Category                          | Rate          | Notes
+CIT on retained/reinvested profits    | 0%            | NO annual corporate income tax on undistributed profits
+CIT on distributed profits            | 22/78 of net  | Standard rate from 1 Jan 2025 (lower 14/86 abolished)
+Income tax on salaries/board fees     | 22%           | Withheld from employment and board member remuneration
+VAT (standard)                        | 24%           | From 1 July 2025
+VAT (reduced)                         | 9%            | Applies to certain goods/services under VAT Act
+Social tax (employer)                 | 33%           | On gross salary/remuneration
+Unemployment insurance                | 1.6% employee + 0.8% employer | On gross salary
+WHT on dividends to non-residents     | 0%            | Company-level CIT (22/78) already paid; NO additional WHT
+WHT on interest to non-residents      | 0%            | No Estonian WHT on interest payments
+WHT on royalties to non-residents     | 10%           | Treaty relief may apply (DTAA caps at 10%)
+Capital gains on shares               | Generally exempt | Participation exemption may apply
+
+WHY THE 0% CIT MATTERS FOR INDIAN GROWTH COMPANIES:
+• Profits can stay in the company reinvested tax-free until you decide to distribute
+• When you do distribute: 22% CIT paid by the company → remaining 78% flows to Indian parent
+• No additional Estonian WHT on dividends (CIT was already paid at company level)
+• Indian parent includes dividend in taxable income → claims Foreign Tax Credit under Section 90/Rule 128
+• Compared to most jurisdictions taxing profits annually, Estonia improves cash available for reinvestment
+
+INDIA-ESTONIA DTAA RATES (in force June 2012):
+Payment Type         | Estonian Domestic | India-Estonia DTAA Rate
+Dividends            | 0% WHT            | 10% (moot — no separate dividend WHT; CIT paid at company level)
+Interest             | 0% (no Estonian WHT) | 10% cap
+Royalties            | 10%               | 10%
+Fees for Tech Svcs   | 10%               | 10%
+Capital gains        | Generally exempt  | Per DTAA provisions
+
+EU GATEWAY BENEFITS (Estonian OÜ = full EU company):
+• EU Single Market Access: sell across EU/EEA without separate incorporation in each country
+• SEPA Payments: send/receive EUR across 36 countries at domestic rates
+• EU VAT OSS (One-Stop Shop): file and pay VAT on cross-border B2C digital/distance sales across all EU via single Estonian filing — massively simplifies EU-wide VAT compliance
+• EU GDPR: operate under EU data protection framework — credibility with European customers
+• EU IP (EUTM, RCD via EUIPO): EU-wide trademark/design protection through single filing
+• EU Funding: eligible for Horizon Europe, EIC, COSME/SMP, structural funds
+• Enhanced credibility vs invoicing from an Indian entity
+
+ESTONIA vs OTHER EU ENTRY POINTS:
+Feature              | Estonia     | Netherlands | Ireland     | Germany
+CIT on retained     | 0%          | Annual tax  | Annual tax  | Annual tax
+Remote formation    | 100% online | Often local | Usually online | Often local steps
+e-Residency         | Yes         | No          | No          | No
+Minimum capital     | EUR 0.01    | Varies      | Varies      | EUR 25,000 (GmbH)
+Compliance cost     | Low         | Medium      | Medium      | High
+
+BANKING FOR e-RESIDENT COMPANIES:
+• Traditional Estonian banks may require stronger local substance or in-person steps
+• Practical alternatives: Wise Business, Revolut Business, Payoneer, Stripe, PayPal (EMI/payment accounts; SEPA transfers, multi-currency, accounting integrations)
+• For larger companies needing full banking: local bank onboarding possible depending on profile
+
+EMPLOYMENT IN ESTONIA:
+• Standard 40-hour work week; minimum wage EUR 946/month from 1 April 2026
+• 28 calendar days paid annual leave
+• Employer costs above gross salary: Social tax 33% + Unemployment insurance 0.8%
+• Employer total burden significantly above gross pay — plan accordingly
+• e-Residency alone does NOT grant the right to physically work in Estonia
+
+IMMIGRATION FOR PHYSICAL PRESENCE (if needed):
+• Startup Visa: for innovative startup founders; 1 year initially → up to 5 years temp residence
+• Employment-based temp residence permit: sponsored by Estonian employer
+• Digital Nomad Visa (DNV): for remote workers employed by non-Estonian companies; up to 1 year
+• ICT Directive: intra-corporate transfer from non-EU parent
+• EU Blue Card: for highly qualified workers meeting salary thresholds
+• Most Indian e-resident entrepreneurs managing OÜ remotely from India need NO Estonian visa/permit
+
+COMPLIANCE CALENDAR (Estonia):
+• Monthly (10th): TSD declaration (social tax, income tax on salaries/board fees) — ONLY if company has employees/board fees. TSD Annex 7 (CIT on distributions) — ONLY if distribution occurred that month.
+• Monthly (20th): VAT return (if VAT-registered)
+• Employment Register: update before employee start date (real-time registration required)
+• Annual (June 30 for Dec 31 FY): Annual Report (financial statements) filing via e-Business Register
+• Annual: Beneficial ownership (UBO) update within 30 days of any change
+• Indian parent: Form FC / APR / FLA Return per FEMA timelines
+
+KEY SIMPLIFICATION: No annual CIT return to file (unlike virtually every other jurisdiction) — CIT is only declared/paid in months when distributions or non-business expenses occur.
+
+VAT REGISTRATION: Mandatory if taxable turnover exceeds EUR 40,000; voluntary registration possible below threshold.
+
+COMPLIANCE PENALTIES (Estonia):
+• Annual Report non-filing (2+ years): compulsory dissolution warning; eventual strike-off
+• CIT on distributions late: 0.06% daily interest on unpaid tax
+• TSD late filing: EUR fine + interest; penalty up to EUR 3,200
+• VAT late filing/payment: 0.06% daily interest; penalties for fraud
+• AML non-compliance: service provider may resign; company may face dissolution
+• Transfer pricing non-arm's length: deemed distribution — 22/78 CIT + interest + penalties
+• Employment Register unregistered employee: fine up to EUR 3,200 per violation
+• GDPR breach: up to EUR 20M or 4% of global turnover (EU-wide)
+• No service provider (for e-resident company): warning → potential dissolution
+
+KEY RISKS FOR INDIAN BUSINESSES IN ESTONIA:
+• Substance requirements: Estonian tax authorities may challenge companies with no genuine economic activity; ensure real business decisions are made through Estonian entity
+• e-Residency ≠ tax residency: personal income remains taxable in India; OÜ is Estonian tax-resident but you are not
+• Transfer pricing: arm's length principle applies to transactions between OÜ and Indian parent
+• AML compliance: Estonia has tightened AML significantly; service providers perform ongoing due diligence
+• FEMA ODI compliance must be handled properly on the Indian side before first remittance
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — ITALY (Entry Italy Guide 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+COUNTRY SNAPSHOT (Italy 2026):
+• Population: ~59 million; EU/Eurozone/G7/G20/OECD founding member
+• Currency: Euro (EUR); GDP: one of Europe's largest economies
+• Key hubs: Milan (financial/commercial hub), Rome (political centre), Turin (manufacturing/automotive), Bologna (logistics/industrial engineering), Naples (southern access/services)
+• Legal system: Civil law
+• Italy has an income tax treaty with India reducing double taxation risk
+• Indian business community active in trade, textiles, IT services, manufacturing, food distribution
+
+WHY ITALY FOR INDIAN BUSINESSES:
+• Gateway to EU single market (4th-largest EU economy)
+• World-class industrial base: machinery, automotive components, agri-food, pharma, luxury/fashion, life sciences
+• 100% foreign ownership permitted in most sectors
+• India-Italy DTAA in force — reduces withholding risk on cross-border payments
+• Strong infrastructure, skilled workforce, and mature banking/legal ecosystem
+• Access to EU trade agreements, EU funding programs, and SEPA payment zone
+
+ENTRY TIMELINES (Italy):
+• S.r.l. incorporation: 1-3 weeks once documents are ready
+• Bank account opening + tax/social security registrations: overall setup 3-8 weeks
+• Professional setup costs: EUR 2,000-8,000 plus share capital, notarial fees, and local filing costs
+• Sector-specific authorizations can add time
+
+BUSINESS STRUCTURES:
+Structure              | Min Capital | Tax Treatment          | Notes
+S.r.l. (Subsidiary)   | EUR 10,000  | IRES 24% + IRAP ~3.9%  | Most common; best for most Indian investors
+S.r.l.s (simplified)  | EUR 1+      | IRES 24% + IRAP ~3.9%  | Simplified S.r.l.; restrictions apply
+Branch (sede secondaria)| No fixed min| Italian tax on PE profits| Parent fully liable; lighter setup
+Rep. Office            | N/A         | Non-revenue              | Liaison only; no CIT
+S.p.A.                 | EUR 50,000  | IRES 24% + IRAP ~3.9%  | Larger/regulated businesses; stock listing
+
+KEY POINT: S.r.l. is the preferred and most common vehicle for Indian businesses — flexible, credible with banks, suits trading, services, and operating companies.
+
+FOREIGN INVESTMENT RULES:
+• No general foreign ownership cap for ordinary commercial companies
+• 100% foreign ownership allowed in non-restricted sectors
+• Golden Power screening: mandatory notification/approval for strategic sector acquisitions (defence, energy, communications, transport, 5G, cloud, semiconductors, national security)
+• No exchange controls on normal commercial flows (EU member)
+
+TAXATION (Italy 2026):
+Tax                    | Rate           | Notes
+IRES (Corporate CIT)   | 24%            | Standard corporate income tax on company profits
+IRAP (Regional Tax)    | Generally 3.9% | Regional production tax; rate varies by region and sector
+Pillar Two             | 15% minimum    | For large multinational groups (>EUR 750M revenue)
+Standard VAT           | 22%            | Reduced rates: 10%, 5%, 4% for specific goods/services
+Effective combined     | ~27.9%         | IRES 24% + IRAP 3.9% (varies by sector/region)
+
+WITHHOLDING TAX RATES (Italy):
+Payment Type        | Domestic Rate    | Treaty Relief (India-Italy)
+Dividends           | 26% domestic WHT | May be reduced under India-Italy DTAA + participation conditions
+Interest            | Rate depends on instrument | Treaty relief may apply
+Royalties           | Generally WHT applies | Treaty relief may apply
+Independent services| Often no domestic WHT unless specific rules | Treaty + PE analysis needed
+
+TAX INCENTIVES (Italy):
+• Investment tax credits for capital goods and digital/green transition projects (subject to annual laws)
+• Patent Box-style incentives for qualifying IP income (where available under current regime)
+• Regional incentives and grants — especially southern Italy (Mezzogiorno) and designated development zones
+• R&D, innovation, training, and energy-efficiency support measures
+• SEZ (Special Economic Zones) in southern Italy and certain port/industrial areas
+
+INCORPORATION PROCESS (Italy):
+1. Obtain tax code (codice fiscale) for shareholders/directors (1-5 days; Agenzia delle Entrate)
+2. Prepare deed of incorporation and by-laws (2-5 days; notary/counsel)
+3. Execute notarial deed (same day; Italian notary — mandatory)
+4. File with Registro delle Imprese / Camera di Commercio (1-3 days)
+5. Obtain VAT number and company registrations (1-2 weeks; Agenzia delle Entrate)
+6. Register with INPS and INAIL if hiring (1-2 weeks)
+7. Open bank account (2-8 weeks; Italian bank)
+8. Obtain sectoral licences if needed (varies)
+
+IMPORTANT SETUP REQUIREMENTS:
+• Codice fiscale (Italian tax code): required for shareholders, directors, beneficial owners
+• PEC (Certified email / Posta Elettronica Certificata): mandatory for all registered companies
+• Digital signature: required for many official filings
+• Registered office (sede legale): physical address in Italy required
+• Foreign corporate shareholders: need apostilled incorporation documents + board resolutions + certified Italian translations
+
+KEY REGULATORY BODIES (Italy):
+• Registro delle Imprese / Camera di Commercio: company registration and filings
+• Agenzia delle Entrate: tax registration and tax administration
+• MIMIT (Ministero delle Imprese e del Made in Italy): industrial policy and incentives
+• Bank of Italy / CONSOB: financial and capital markets oversight
+• Garante (Data Protection Authority): GDPR enforcement
+• INPS: social security; INAIL: workplace accident insurance
+• AGCM: competition oversight
+
+EMPLOYMENT & PAYROLL (Italy):
+• 40-hour standard work week
+• Employment governed by Civil Code + statutory labour rules + CCNLs (sectoral collective bargaining agreements — binding and vary by industry)
+• Minimum paid annual leave, sick leave, maternity/paternity protection, notice periods, mandatory workplace safety
+• Payroll: IRPEF withholding, INPS contributions, INAIL insurance, payslips, annual employee tax certificates (Certificazione Unica)
+• Employer INPS contributions are significant — typically 30-35% above gross salary
+• CCNLs (Contratti Collettivi Nazionali di Lavoro) are industry-specific agreements that determine minimum pay, benefits, and terms — critical to identify the correct CCNL for your sector
+
+IMMIGRATION FOR INDIAN NATIONALS (Italy):
+• Non-EU nationals need correct visa and residence/work permit to work in Italy
+• Work visa tied to employer sponsorship (Decreto Flussi — annual quota system; apply when quotas open)
+• Intra-company transfer route: for managers/specialists from Indian parent
+• EU Blue Card: for highly qualified workers meeting salary thresholds
+• Italy Startup Visa: for innovative startup founders (no quota requirement)
+• Researcher/self-employed visa: for specific roles
+
+BANKING (Italy):
+• Major Italian banks: Intesa Sanpaolo, UniCredit, Banco BPM, Banca MPS, BPER Banca
+• Foreign-owned structures face enhanced KYC/due diligence — allow 2-8 weeks
+• Required: incorporation docs, tax codes, proof of registered office, UBO documentation, board resolutions, business plans
+• Digital fintech options (Qonto, N26 Business) faster than traditional banks
+
+DATA PROTECTION (Italy):
+• EU GDPR applies directly + Italy's national Privacy Code (Codice Privacy)
+• Garante per la Protezione dei Dati Personali is the supervisory authority
+• Key obligations: lawful processing, transparency notices, processor contracts, breach management, DPIAs where necessary
+• Max GDPR fines: up to EUR 20M or 4% of global annual turnover (higher of two)
+
+COMPLIANCE CALENDAR (Italy — Key Dates):
+• Monthly (around 16th): VAT, IRPEF withholding, INPS contributions settlement via F24 payment system
+• Mar 16: Certificazione Unica (annual tax certificate) issued to employees and contractors
+• Apr 30: Annual VAT return filing; prepare financial statements and tax computations
+• Jun 16: First IRES/IRAP advance payments; monthly settlement
+• Sep 30: Corporate tax return (Modello Redditi SC / IRAP) for calendar-year companies
+• Oct 31: Annual withholding return (Form 770)
+• Nov 30: Second IRES/IRAP advance payments
+
+COMPLIANCE PENALTIES (Italy):
+• VAT late filing/payment: interest, penalties, administrative charges (Agenzia delle Entrate)
+• Corporate tax late/incorrect return: penalties and interest
+• Payroll withholding/INPS late remittance: surcharges, interest, sanctions
+• Financial statements late filing: administrative fines and filing defaults (Registro delle Imprese)
+• GDPR serious breach: significant administrative fines (Garante)
+• Golden Power failure to notify where required: transaction risk, sanctions, remedial measures
+
+KEY RISKS FOR INDIAN BUSINESSES IN ITALY:
+• Golden Power screening in strategic sectors (mandatory — failure to notify has serious consequences)
+• Bank onboarding enhanced KYC for foreign-owned structures (allow extra time)
+• CCNL employment compliance — must identify correct sectoral agreement for each employee category
+• Transfer pricing and permanent establishment risk for Indian parent companies
+• Regional and municipal permitting differences for industrial projects
+• Italian language: contracts, company filings, and official communications typically in Italian
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — INDONESIA (Entry Indonesia Guide 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+COUNTRY SNAPSHOT (Indonesia 2026):
+• GDP: ~USD 1.4 trillion (2025); Southeast Asia's LARGEST economy; world's 4th most populous country (280M+)
+• Currency: Indonesian Rupiah (IDR); GDP growth ~5% annually
+• Population: 280M+; median age ~30 years; world's largest Muslim-majority nation
+• Key hubs: Jakarta/Jabodetabek (35M metro — primary business hub), Surabaya (industrial), Bali (tourism/digital hub), Batam (FTZ near Singapore), Bandung (tech/creative), Semarang, Makassar, Medan
+• New capital Nusantara (IKN) under development in East Kalimantan
+• Indian diaspora: ~120,000+; strong linkages in textiles, commodities, tech
+• India-Indonesia DTAA: signed 1987 (with subsequent protocols); provides reduced WHT on dividends, interest, royalties
+• ASEAN member; RCEP in force; ASEAN-India FTA (AIFTA) in force; India-Indonesia CECA under negotiation
+
+WHY INDONESIA FOR INDIAN BUSINESSES:
+• Southeast Asia's largest economy — 280M+ people, rapidly growing middle class (100M+)
+• One of the world's fastest-growing digital economies (5 unicorns including GoTo, Tokopedia/TikTok Shop)
+• Omnibus Law reforms (2020/2023) significantly simplified business registration and liberalized FDI
+• Massive tax incentives: Tax Holidays up to 20 years (pioneer industries); Tax Allowance; Super Deductions
+• Strategic ASEAN location; abundant natural resources (nickel, coal, palm oil)
+• Global hub for nickel processing, EV battery supply chains, green economy
+• Government target: top-5 global economy by 2030 (Golden Indonesia 2045 vision)
+
+STANDARD STRUCTURE FOR FOREIGN INVESTORS: PT PMA
+• PT PMA (Perseroan Terbatas Penanaman Modal Asing) = foreign-owned limited liability company
+• The ONLY viable structure for foreign businesses conducting revenue-generating activities
+• Minimum investment plan: IDR 10 billion per business line (KBLI code) — excluding land and buildings (~USD 625,000)
+• Minimum paid-up capital: IDR 2.5 billion (~USD 156,000)
+• Minimum 2 shareholders (individuals or companies, any nationality)
+• No Indonesian director requirement but at least 1 director must reside in Indonesia (practical requirement)
+• Commissioner required (minimum 1) — supervisory function
+
+BUSINESS STRUCTURE COMPARISON:
+Structure              | Foreign Ownership | Min Investment        | Tax          | Notes
+PT PMA (100% foreign)  | Up to 100% (sector-dependent) | IDR 10B + IDR 2.5B paid-up | CIT 22% | Standard for foreign investors
+PT PMA (Joint Venture) | Shared            | IDR 10B + IDR 2.5B   | CIT 22%      | For restricted sectors/local market
+Rep. Office (KPPA)     | N/A (parent)      | Allocated by parent  | None (no revenue) | Liaison/market research only
+Branch Office          | N/A (parent)      | Varies by sector     | CIT 22% + 20% BPT | Banking, O&G, construction only
+
+POSITIVE INVESTMENT LIST (KEY FDI RULE):
+• Replaced old Negative Investment List (DNI) — now sectors are OPEN by default unless restricted
+• Identified by KBLI code (Indonesian Standard Classification of Business Activities)
+• Most sectors open to 100% foreign ownership after Omnibus Law reforms
+• Still restricted: media/broadcasting, certain agribusiness, defence, some public services
+• ALWAYS check current KBLI classification for your specific business activity before planning
+
+CORPORATE INCOME TAX (Indonesia 2026):
+Category                       | Rate         | Notes
+Standard CIT (PPh Badan)       | 22%          | All resident companies and PEs
+Listed company discount        | 19% (3pp off)| Companies listing 40%+ shares on IDX and meeting conditions
+SME rate                       | 11% effective| 50% CIT reduction on income up to IDR 4.8B for revenue <IDR 50B
+MSME Final Tax                 | 0.5% turnover| For MSMEs with annual turnover <IDR 4.8B (time-limited 3-4 years)
+Tax Holiday (Pioneer Industry) | 100% CIT exempt| 5-20 years; IDR 100B-30T+ investment; extendable to 25 years
+Tax Allowance                  | 30% reduction| Over 6 years for priority sector qualifying investments
+Branch Profit Tax (PPh 26)     | 20% (treaty 10-15%)| On after-tax profits remitted by foreign company branches
+
+VAT (Indonesia 2026):
+• Official rate: 12% from 1 January 2025 (Harmonised Tax Law)
+• IMPORTANT: for most goods/services, effective rate is approximately 11% through transitional calculation mechanisms
+• VAT registration (PKP status): mandatory when annual turnover exceeds IDR 4.8 billion
+• Monthly VAT returns (SPT Masa PPN) due by end of following month
+• E-invoicing (e-Faktur): mandatory for all VAT-able transactions
+• Export of goods: zero-rated (0%)
+• VAT-exempt: basic necessities, healthcare, education, financial services
+• Luxury Goods Sales Tax (PPnBM): 10%-200% on luxury items
+
+WITHHOLDING TAX — INDIA-INDONESIA DTAA:
+Payment Type                  | Indonesian Domestic | India-Indonesia DTAA
+Dividends to non-residents    | 20% (PPh 26)        | 10% for 25%+ holding; 15% otherwise
+Interest to non-residents     | 20% (PPh 26)        | 10%
+Royalties (equipment)         | 20% (PPh 26)        | 10%
+Royalties (other)             | 20% (PPh 26)        | 15%
+Service fees to non-residents | 20% (PPh 26)        | PE/business profits article applies
+Branch Profit Tax             | 20% (PPh 26)        | 10-15% under DTAA
+
+TAX INCENTIVES (Indonesia — Very Important):
+• Tax Holiday: 100% CIT exemption for 5-20 years for Pioneer Industries with minimum IDR 100 billion investment; extendable to 25 years for mega-investments (IDR 30 trillion+). Pioneer industries include: basic metals, oil refining, petrochemicals, machinery, robotics, pharmaceuticals, telecoms, maritime, agriculture, digital economy infrastructure
+• Tax Allowance: 30% of investment value deductible over 6 years (5% per year) + accelerated depreciation + loss carry-forward up to 10 years + reduced 10% WHT on dividends for qualifying investments in priority sectors/areas
+• Super Deduction: up to 300% for R&D activities; 200% for vocational/competency training; 200% for apprenticeships
+• SEZ Incentives: income tax facilities (reduction/exemption), VAT and import duty exemptions for businesses in Special Economic Zones (KEK)
+• Free Trade Zones (FTZ): Batam, Bintan, Karimun — VAT and import duty exemptions for manufacturing/logistics
+• IKN (New Capital Nusantara): additional tax incentives for investors in the new capital city
+
+INCORPORATION PROCESS (Indonesia — PT PMA):
+1. KBLI code identification + Positive Investment List check (before anything else)
+2. Name reservation via AHU Online (1-3 days; Kemenkumham)
+3. Notary drafts Deed of Establishment and Articles (3-7 days; Indonesian notary — mandatory)
+4. Legal Entity Approval (SK Pengesahan) from Kemenkumham (3-7 days)
+5. Register on OSS-RBA for Business Identification Number (NIB) (1-3 days)
+6. Obtain risk-based business licences via OSS-RBA (1-4 weeks depending on risk class)
+7. Register for Tax ID (NPWP) via Coretax system (1-2 weeks)
+8. Register as VAT-able entrepreneur (PKP) if applicable (1-2 weeks)
+9. Open Indonesian corporate bank account (4-8 weeks — LONGEST STEP)
+10. Deposit paid-up capital (min IDR 2.5B) into company account
+11. Apply for RPTKA + ITAS for foreign workers (4-8 weeks)
+12. Register with BPJS Ketenagakerjaan and BPJS Kesehatan (before first payroll)
+TOTAL TIMELINE: 4-8 weeks for registration; 8-16 weeks for full operational setup
+
+KEY REGULATORY BODIES (Indonesia):
+• Ministry of Investment / BKPM: investment coordination and licensing via OSS-RBA
+• Kemenkumham (Ministry of Law and Human Rights): company registration and legal entity approval
+• DJP/DGT (Directorate General of Taxes): tax administration via new Coretax system
+• Bank Indonesia (BI): central bank, monetary policy, foreign exchange regulation
+• OJK (Otoritas Jasa Keuangan): financial services authority
+• Ministry of Manpower: labour regulations and foreign worker permits (RPTKA/ITAS)
+• BPOM: food and drug administration; Komdigi: telecoms and digital
+
+EMPLOYMENT & PAYROLL (Indonesia):
+• Standard 40-hour work week (8 hrs/day 5 days, or 7 hrs/day 6 days)
+• Minimum wage set by provincial/city government annually (Jakarta 2025: ~IDR 5.4M/month)
+• THR (Tunjangan Hari Raya): mandatory religious holiday allowance = 1 month salary (paid before Eid)
+• Severance pay: 1-9 months salary based on tenure (Omnibus Law reduced maximums)
+• Minimum 12 days annual leave after 12 months
+• Maternity leave: 3 months (paid); Paternity leave: 2 days (paid)
+• BPJS Ketenagakerjaan (employer 5.74-11.74%): JKK (work accident), JKM (death), JHT (old age), JP (pension), JKP (job loss)
+• BPJS Kesehatan (health): employer 4%, employee 1% of salary (capped)
+• Monthly PPh 21 deposit by 15th, file by 20th of following month via Coretax
+• 4:1 Indonesian-to-foreign employee ratio generally applies (1:1 in some sectors) + knowledge transfer requirement
+
+IMMIGRATION FOR INDIAN NATIONALS (Indonesia):
+• ITAS (Limited Stay Permit) + RPTKA (Foreign Worker Utilisation Plan): standard work permit route
+  - RPTKA approval required before ITAS; DKP-TKA fee USD 1,200/foreign worker/year
+  - Maximum 2-year initial period, renewable
+• Investor KITAS: for shareholders/investors in PT PMA meeting minimum investment thresholds
+• Director KITAS: for appointed directors of Indonesian companies
+• B211A Business Visa: short-term business visits (60 days, extendable)
+• Second Home Visa: 5-10 years for individuals meeting financial criteria
+• ITAP (Permanent Stay Permit): after 3+ consecutive years on ITAS
+
+BANKING (Indonesia):
+• Typical time for PT PMA: 4-8 weeks — often the LONGEST step
+• Physical presence of directors usually required at bank branch
+• Required: Deed of Establishment, SK Pengesahan, NIB, NPWP, domicile letter (SKDP), board resolution, passport copies + KITAS/ITAS for foreign directors, proof of registered office, company profile/business plan
+• Major banks: Bank Mandiri, Bank BRI, Bank BNI, Bank BCA, Bank CIMB Niaga
+• International banks: HSBC, Standard Chartered, DBS also serve PT PMAs
+
+FOREIGN EXCHANGE RULES (Indonesia):
+• DHE (Devisa Hasil Ekspor) requirement: export proceeds must be deposited in Indonesian banks for 3 months — mandatory
+• Foreign currency transactions >USD 25,000/month require supporting documentation
+• Dividends, profits, capital: can be repatriated freely in foreign currency subject to WHT and documentation
+• All domestic transactions generally settled in Rupiah (BI Regulation; limited exceptions for international trade)
+
+COMPLIANCE CALENDAR (Indonesia — Key Dates):
+• Monthly (15th): PPh 21/23/25/4(2) deposits; BPJS contributions
+• Monthly (20th): SPT Masa PPh filings (PPh 21/23/26)
+• Monthly (end of month): VAT Return (SPT Masa PPN) + e-Faktur
+• Jan 30: Annual LKPM (Investment Activity Report) to BKPM
+• Jan 31: Form 1721-A1 to employees (annual tax certificate for prior year); VAT return for December
+• Mar 31: Individual PIT returns (SPT Tahunan PPh OP)
+• Apr 10: Quarterly LKPM for Q1
+• Apr 30: Annual CIT Return (SPT Tahunan PPh Badan) for prior fiscal year
+• Jun 30: AGM deadline (within 6 months of December FY end)
+• Jul 10, Oct 10: Quarterly LKPM for Q2 and Q3
+• Dec 31: Indonesian tax year end; THR payment before Eid al-Fitr (religious holiday allowance)
+
+COMPLIANCE PENALTIES (Indonesia):
+• Annual CIT Return late: 2% monthly penalty on underpaid tax; administrative penalties
+• VAT return late/underpaid: 2% monthly penalty + potential audit
+• PPh 21 (payroll WHT) non-compliance: 2% monthly surcharge + potential criminal liability
+• Transfer pricing non-arm's length: adjustment + significant penalties + interest
+• RPTKA/ITAS violations (foreign worker without permit): IDR 10-100M fine + deportation
+• PDP Law (data privacy) violations: fines up to 2% of annual revenue; criminal penalties up to 6 years + IDR 6B fine
+• Anti-nominee provisions: nominee arrangements are VOID under Company Law; serious legal risk
+• Late LKPM investment reports: potential suspension of OSS business licence
+
+KEY RISKS FOR INDIAN BUSINESSES IN INDONESIA:
+• IDR 10 billion minimum investment plan per KBLI: significant capital commitment — plan carefully
+• KBLI code selection: wrong code = wrong licence = compliance problems; identify correctly before registration
+• Anti-nominee rules strictly enforced: nominee shareholder arrangements are void under Indonesian Company Law
+• Indonesian language: contracts involving Indonesian parties technically require Bahasa Indonesia version (prevails in conflict); bilingual contracts are standard practice
+• Land ownership: foreign individuals and PT PMAs cannot own freehold land (Hak Milik); PT PMAs can hold HGB (Hak Guna Bangunan) for 30+20+30 years
+• DHE export proceeds holding requirement (3 months in Indonesian banks)
+• Coretax system (CTAS from January 2025): teething issues expected in first year of implementation
+• Transfer pricing enforcement: DGT (tax authority) is increasingly sophisticated
+• Labour law: severance obligations still significant despite Omnibus Law changes; TCO required for foreign workers
+
+SPECIAL ECONOMIC ZONES AND STRATEGIC AREAS (Indonesia):
+• KEK (Kawasan Ekonomi Khusus / Special Economic Zones): 19 designated KEKs with income tax facilities, VAT/import duty exemptions, simplified licensing. Notable: Sei Mangkei (palm oil), Mandalika (tourism), Galang Batang (industrial)
+• FTZ (Free Trade Zones): Batam, Bintan, Karimun — VAT and import duty exemptions for manufacturing and logistics (near Singapore — very strategic)
+• Industrial Estates: Cikarang (EJIP, Jababeka), Bekasi, Karawang (West Java); SIER Surabaya; estates in Kalimantan and Sulawesi
+• IKN (Nusantara — new capital): pioneering investment with special tax holidays, super deductions, simplified licensing in East Kalimantan
+• Bonded Zones (Kawasan Berikat): for manufacturing/export-oriented companies with customs facilities
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 DOCUMENT REQUIREMENTS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
