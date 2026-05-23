@@ -1935,6 +1935,160 @@ KEY RISKS FOR INDIAN BUSINESSES IN ITALY:
 • Italian language: contracts, company filings, and official communications typically in Italian
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — VIETNAM (Entry Vietnam Guide 2026)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 
+COUNTRY SNAPSHOT (Vietnam 2026):
+• GDP: ~USD 430 billion (2025); Southeast Asia's 3rd-largest economy (after Indonesia, Thailand)
+• Population: 99 million+; median age ~32 years; high literacy; strong English in business hubs
+• Currency: Vietnamese Dong (VND)
+• Key hubs: Ho Chi Minh City (primary commercial center), Hanoi (capital/political), Da Nang, Hai Phong, Binh Duong, Dong Nai, Bac Ninh
+• Legal system: Civil law (socialist republic)
+• Indian diaspora: 15,000+; growing Indian business presence in IT, manufacturing, textiles, commodities
+• India-Vietnam DTAA: in force (relevant for dividend/interest withholding relief)
+• ASEAN member; Vietnam-India Strategic Partnership; Vietnam-India trade agreement active
+• World's 2nd-largest rice exporter; major electronics/semiconductors manufacturer; growing fintech/digital economy
+ 
+WHY VIETNAM FOR INDIAN BUSINESSES:
+• Southeast Asia's 3rd-largest economy; rapidly growing middle class (50M+)
+• Strategic manufacturing hub (alternative to China) — strong cluster in Binh Duong, Dong Nai, Bac Ninh
+• Highly open FDI regime: 100% foreign ownership permitted in most sectors
+• Skilled, low-cost labor (vs China/Thailand); strong supply chains
+• Gateway to ASEAN; preferential trade access via RCEP, ASEAN-India FTA
+• Established Indian business community — cultural familiarity, local networks
+• Growing digital economy and startup ecosystem
+ 
+ENTRY TIMELINES (Vietnam):
+• Straightforward LLC incorporation: 2-4 weeks (company registration only)
+• Full operational setup (banking, tax, e-invoices, labor): 6-12 weeks
+• Sector-specific approvals (if required): add 2-12 weeks
+• Total typical timeline: 6-12 weeks for operating business
+ 
+BUSINESS STRUCTURES (Vietnam):
+Structure                      | Min Capital      | Tax Treatment        | Notes
+Limited Liability Company (LLC)| Flexible (often USD 3K-100K depending on sector) | CIT 20% | Most common for foreign investors
+Joint-Stock Company (JSC)      | Typically USD 50K+ | CIT 20%        | For multiple investors/capital raising
+Representative Office          | None             | Non-revenue only     | Liaison/market research only
+Branch Office                  | Depends on sector | CIT 20% on PE        | Limited availability; specific sectors only
+ 
+FOREIGN INVESTMENT RULES (Vietnam):
+• 100% foreign ownership permitted in most business lines (retail, wholesale, services, manufacturing, tech)
+• Some sectors restricted: media, defense, telecom (conditional), certain natural resources
+• Foreign Investment Registration Certificate (FIRC) required for projects above certain thresholds or in certain sectors
+• No local shareholder mandate for most activities
+• Exchange controls present: capital inflow/outflow documented; profits repatriable after tax
+ 
+CORPORATE INCOME TAX (Vietnam 2026):
+Category                                     | Rate  | Notes
+Standard CIT (most businesses)               | 20%   | Flat rate on taxable profits
+Small/medium enterprises (revenue <VND 300B) | 15-17%| Progressive rates below standard
+High-tech enterprises / SEZ companies        | 10%   | Incentivized rate for qualifying projects
+Incentive rate (project-dependent)           | 0-10% | Tax holidays up to 4 years for certain sectors/locations
+ 
+VAT (Vietnam 2026):
+• Standard rate: 10% (reduced from previous 12% following recent reforms)
+• VAT registration mandatory when annual turnover exceeds VND 100 million (~USD 4,000)
+• Export goods: zero-rated (0%)
+• VAT-exempt: agriculture (original state), healthcare, education, certain financial services
+• E-invoicing mandatory for VAT-registered businesses
+ 
+WITHHOLDING TAX — INDIA-VIETNAM DTAA:
+Payment Type                  | Vietnam Domestic | India-Vietnam DTAA
+Dividends                     | 5-10% (project-dependent) | 5-10% (capped under DTAA)
+Interest                      | 10%              | 10% (capped under DTAA)
+Royalties                     | 10%              | 10%
+Service fees / management fees| 5% (typically)   | Business profits rules apply
+Branch Profit Remittance      | 5-10%            | Relief under treaty
+ 
+TAXATION — FILING DEADLINES:
+• Monthly VAT/PIT declarations: due by 20th of following month
+• Quarterly provisional CIT payments: due within 30 days of quarter-end
+• Annual CIT finalization: due within 90 days of fiscal year-end
+• Annual financial statements: within statutory/lender timeline
+ 
+INCORPORATION PROCESS (Vietnam — LLC):
+1. Name search and reservation via provincial business registration authority (same day - few days)
+2. Prepare charter, shareholder agreement, beneficial owner disclosures (3-7 days)
+3. File foreign investment dossier if required (1-4 weeks; investment authority)
+4. Obtain enterprise registration certificate from provincial authority (3-10 working days)
+5. Register tax details and e-invoice system (1-2 weeks; tax authority)
+6. Open corporate bank account (2-8 weeks; bank — typically the longest step)
+7. Register labor/social-insurance accounts if hiring (before first payroll)
+8. Apply for work permits if hiring foreign staff (at least 15 days before start)
+ 
+BANKING (Vietnam):
+• Major banks: Vietcombank, BIDV, Agribank, MB Bank, Techcombank, Sacombank
+• International banks: HSBC Vietnam, Standard Chartered, Citi
+• Bank account opening typically 2-8 weeks; requires legalized foreign documents, translations, business plans, proof of office
+• Physical presence at bank often required for foreign-owned entities
+ 
+EMPLOYMENT & PAYROLL (Vietnam):
+• Standard 40-48 hour work week (8 hrs/day, 5-6 days)
+• Statutory minimum wage: varies by province (2026: ~VND 5M-7M/month depending on location)
+• Social insurance contributions: employer 17.5%, employee 8% on salary
+• Health insurance: employer 3%, employee 1.5%
+• Unemployment insurance: employer 0.5%, employee 1%
+• Annual leave: minimum 12 days; increases with tenure
+• Monthly payroll withholding and social-insurance deposits required
+• Work permit required for all foreign employees; apply at least 15 days before start date
+ 
+IMMIGRATION (Vietnam):
+• Work Permit: required for all foreign employees; apply 15+ days before start date
+• Temporary Residence Certificate (TRC): required for foreign staff staying >3 months
+• Business Visa: short-term visits; renewable
+• Some sectors qualify for expedited work-permit processing
+ 
+COMPLIANCE CALENDAR (Vietnam):
+• Monthly (20th): VAT, PIT/WHT declarations and payments
+• Monthly (before payroll): Social-insurance contributions
+• Quarterly (30 days after quarter-end): Provisional CIT payment
+• Within 90 days of year-end: Annual CIT finalization and financial statements
+• Within 10 days of any change: Update beneficial-owner information
+• Before first hire: Work-permit applications for foreign staff
+ 
+COMPLIANCE PENALTIES (Vietnam):
+• Late/missing tax returns: 2% monthly interest on unpaid tax + administrative fines
+• Late social-insurance contributions: surcharges and penalties
+• Work-permit violations: fines, employee deportation risk
+• Enterprise registration non-compliance: sanctions and correction orders
+• Accounting/invoice violations: tax adjustments and disallowance of costs
+ 
+KEY RISKS FOR INDIAN BUSINESSES IN VIETNAM:
+• Market-access classification errors: confirm business line is permitted before registration
+• Underestimating banking timeline: 2-8 weeks common; allow extra time for foreign-owned entities
+• Transfer pricing exposure: arm's length principle applies to intercompany transactions
+• Exchange-control documentation: all foreign-currency flows must be documented and justified
+• Labor law compliance: termination, severance, and benefit rules differ significantly from India
+• Poor beneficial-owner record-keeping: must update within 10 days of changes
+ 
+SPECIAL ECONOMIC ZONES & INDUSTRIAL PARKS (Vietnam):
+• Industrial Parks / Export-Processing Zones: Binh Duong, Dong Nai, Bac Ninh, Hai Phong, Ho Chi Minh City, Da Nang — offer preferential CIT rates (10%), import duty exemptions on machinery/inputs
+• High-Tech Parks: Ho Chi Minh City, Hanoi, Da Nang — offer 10% CIT rate for qualifying tech companies
+• ASEAN-China Free Trade Zone clusters in Vietnam border regions — additional customs incentives
+ 
+IP & DATA PROTECTION (Vietnam):
+• Trademark, patent, design, copyright: protected via Vietnam IP Office (NOIP)
+• File early before market launch for brand names and key technology
+• Personal Data Protection Law (Law 2019): requires consent/lawful basis, privacy notices, breach notification
+• Cross-border data transfer: subject to restrictions; transfer agreements needed
+ 
+REPATRIATION FROM VIETNAM:
+• Profits can generally be remitted after tax compliance and authorization
+• Dividends, royalties, management fees: subject to withholding (5-10% depending on treaty relief)
+• Foreign-exchange approval: typically automatic for documented repatriation
+• India-side FEMA ODI compliance: required before first capital contribution
+ 
+COMPLY GLOBALLY VIETNAM SERVICES:
+• Pre-entry sector classification and market-access verification
+• Vietnam LLC incorporation and foreign-investment registration support
+• Tax registration (CIT, VAT, PIT), e-invoice setup, compliance calendars
+• Banking and KYC documentation support
+• Work permit and immigration planning for foreign staff
+• Ongoing compliance: monthly returns, annual filings, beneficial-owner updates
+• Transfer pricing support for intercompany transactions
+• India-Vietnam cross-border structuring and treaty planning
+ 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 KNOWLEDGE BASE — INDONESIA (Entry Indonesia Guide 2026)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
