@@ -89,28 +89,31 @@ function freshSession(sessionId) {
     sessionId,
     history: [],
     leadData: {
-      name:                null,
-      email:               null,
-      phone:               null,
-      companyName:         null,   // NEW
-      currentCountry:      null,
-      targetCountry:       null,
-      additionalCountries: [],     // NEW — multi-country support
-      serviceNeeded:       null,
-      businessStage:       null,
-      timeline:            null,
-      documentsRequired:   null,
-      topQuestions:        [],     // NEW — stores the 3 questions
-      questionAnswers:     [],     // NEW — stores answers to those 3 questions
-      conversationSummary: null,   // NEW — AI-generated summary
+      name: null,
+      email: null,
+      phone: null,
+      companyName: null,
+      currentCountry: null,
+      targetCountry: null,
+      additionalCountries: [],
+      serviceNeeded: null,
+      businessStage: null,
+      timeline: null,
+      documentsRequired: null,
+      topQuestions: [],
+      questionAnswers: [],
+      conversationSummary: null,
     },
-    leadSaved:           false,
-    humanRequested:      false,
-    questionsAsked:      false,    // NEW — track if we've asked for 3 questions
-    questionsAnswered:   false,    // NEW — track if they've answered
-    messageCount:        0,        // NEW — for timing the 3-question prompt
-    createdAt:           new Date(),
-    lastActive:          new Date(),
+    leadSaved: false,
+    humanRequested: false,
+    questionsAsked: false,
+    questionsAnswered: false,
+    messageCount: 0,
+    // NEW: track onboarding phase
+    // Phases: 'gather_name' → 'gather_email' → 'gather_country' → 'active'
+    conversationPhase: 'gather_name',
+    createdAt: new Date(),
+    lastActive: new Date(),
   };
 }
 
@@ -2556,6 +2559,65 @@ function shouldAskThreeQuestions(session) {
 // ─────────────────────────────────────────────
 // CLAUDE AI  — with adaptive context injection
 // ─────────────────────────────────────────────
+function getPhaseInstructions(session) {
+  const l = session.leadData;
+  const phase = session.conversationPhase;
+
+  // Auto-advance phase based on what we already have
+  if (phase === 'gather_name' && l.name) {
+    session.conversationPhase = 'gather_email';
+  }
+  if (phase === 'gather_email' && (l.email || l.phone)) {
+    session.conversationPhase = 'gather_country';
+  }
+  if (phase === 'gather_country' && l.currentCountry) {
+    session.conversationPhase = 'active';
+  }
+
+  const currentPhase = session.conversationPhase;
+
+  if (currentPhase === 'gather_name') {
+    return `
+[PHASE: gather_name]
+CRITICAL PRIORITY: You do NOT yet know the user's name.
+- Answer any question they ask with a brief, helpful response (2-3 lines max).
+- Then ALWAYS end your reply with a warm, natural version of: "By the way, what should I call you?"
+- Do NOT discuss services, countries, or anything else at length until you have their name.
+- Do NOT include SUGGEST_TOPICS in this phase.
+`;
+  }
+
+  if (currentPhase === 'gather_email') {
+    return `
+[PHASE: gather_email]
+You have their name (${l.name}) but no email or phone yet.
+- Continue the conversation naturally and helpfully.
+- Within your reply, naturally ask: "Could I also grab your email or WhatsApp number, ${l.name}? That way our team can follow up with any details."
+- Keep it casual — don't make it feel like a form.
+- Do NOT include SUGGEST_TOPICS yet.
+`;
+  }
+
+  if (currentPhase === 'gather_country') {
+    return `
+[PHASE: gather_country]
+You have name (${l.name}) and contact info but don't know their current country yet.
+- Continue naturally, answer any question briefly.
+- Ask: "Where are you currently based, ${l.name}?" — work this in naturally.
+- Once they mention a country, SUGGEST_TOPICS becomes appropriate.
+- Do NOT include SUGGEST_TOPICS yet.
+`;
+  }
+
+  // 'active' phase — full conversation mode
+  return `
+[PHASE: active — full conversation mode]
+You have: Name=${l.name}, Contact=${l.email || l.phone}, Country=${l.currentCountry}.
+- Give full, substantive answers. Include SUGGEST_TOPICS after every informational response.
+- Now is the right time to surface relevant service bubbles and deep-dive into their needs.
+`;
+}
+
 async function getClaudeReply(session, userMessage) {
   session.history.push({ role: 'user', content: userMessage });
   if (session.history.length > 24) session.history = session.history.slice(-24);
@@ -2578,6 +2640,9 @@ async function getClaudeReply(session, userMessage) {
   const contextNote = known.length
     ? `\n\n[CUSTOMER CONTEXT — already known, do NOT re-ask these: ${known.join(' | ')}]`
     : '';
+
+  // ── PHASE INSTRUCTIONS (NEW) ──────────────────────────────────────
+  const phaseNote = getPhaseInstructions(session);
 
   // Inject 3-question prompt flag
   const threeQNote = shouldAskThreeQuestions(session)
@@ -2622,7 +2687,7 @@ async function getClaudeReply(session, userMessage) {
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 700,
-        system: SYSTEM_PROMPT + contextNote + threeQNote + answersNote + handoffNote + adaptiveNote,
+        system: SYSTEM_PROMPT + contextNote + phaseNote + threeQNote + answersNote + handoffNote + adaptiveNote,
         messages: session.history,
       }),
     });
@@ -2652,7 +2717,6 @@ async function getClaudeReply(session, userMessage) {
     return "I'm having a technical issue. Please email us at sales@complyglobally.com 🙏";
   }
 }
-
 // ─────────────────────────────────────────────
 // GENERATE CONVERSATION SUMMARY (async, fires after lead is complete)
 // ─────────────────────────────────────────────
@@ -2719,7 +2783,6 @@ app.post('/api/chat', async (req, res) => {
       saveLead(session.leadData).catch(console.error);
     }
     await saveSession(session);
-
     // Parse out SUGGEST_TOPICS if present
     let cleanReply = reply;
     let suggestedTopics = [];
@@ -2730,9 +2793,14 @@ app.post('/api/chat', async (req, res) => {
       } catch(e) {}
       cleanReply = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/, '').trim();
     }
-
-    res.json({ reply: cleanReply, sessionId, leadData: session.leadData, suggestedTopics });
-
+    // NEW: include conversationPhase so frontend knows when to show bubbles
+    res.json({ 
+      reply: cleanReply, 
+      sessionId, 
+      leadData: session.leadData, 
+      suggestedTopics,
+      conversationPhase: session.conversationPhase
+    });
   } catch (err) {
     console.error('❌ /api/chat error:', err.message);
     res.json({ reply: 'Something went wrong. Please try again.' });
