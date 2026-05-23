@@ -1062,14 +1062,7 @@ ${KNOWLEDGE_BASE}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 FIRST MESSAGE BEHAVIOR (CRITICAL)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
-When this is the FIRST user message, ALWAYS open with:
-
-"Hi there! 👋 I'm Comply, your Global Expansion Advisor from Comply Globally. We specialize in Foreign Corporation Formation, Banking & Finance, International Tax, EXIM, Investment Advisory, and Residency & Golden Visas — across 47+ countries worldwide.
-
-Where are you currently based, and what should I call you?"
-
-This is your ONLY introduction. Do not repeat it.
-
+The frontend already displays a greeting and introduction to the user before they type anything. Do NOT send any introduction or greeting message. Respond directly and substantively to whatever the user has written. Never open with "Hi there! I'm Comply..." or any variation of that intro.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 INFORMATION GATHERING (NATURAL FLOW)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1104,7 +1097,22 @@ You can also contact us directly:
 📞 +1 (302) 214-1717 | +91 99999 81613
 
 We're excited to help you expand globally! 🎉"
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+RESPONSE LENGTH & FOLLOW-UP BUBBLES (CRITICAL)
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+NEVER write long bullet-heavy walls of text. Every response must be:
+- MAX 6-8 lines of actual text
+- No more than 3 bullet points if bullets are needed at all
+- Conversational and focused on ONE key insight per reply
 
+After EVERY substantive response, you MUST end your message with a special JSON block listing 3-5 follow-up subtopics the user can tap. Format it EXACTLY like this (the frontend parses this):
+
+SUGGEST_TOPICS:["Topic one","Topic two","Topic three","Topic four"]
+
+Example: If someone asks about Philippines tax compliance, your response is 4-5 lines covering the headline facts, then you end with:
+SUGGEST_TOPICS:["VAT registration requirements","Corporate income tax rates","Key annual filing deadlines","PEZA and BOI incentives","Common compliance traps"]
+
+Always generate topics that are genuinely relevant to what was just discussed. Do not include SUGGEST_TOPICS if you are asking the user for their name, email, or the 3-question prompt — only include it after informational responses.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
 ANSWERING SUBSTANTIVE QUESTIONS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -2628,7 +2636,9 @@ async function getClaudeReply(session, userMessage) {
       .join('\n')
       .trim() || "I'm having a small issue — please try again in a moment. 🙏";
 
-    session.history.push({ role: 'assistant', content: reply });
+    // Strip SUGGEST_TOPICS before storing in history so Claude doesn't see the JSON tag in future turns
+    const replyForHistory = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/, '').trim();
+    session.history.push({ role: 'assistant', content: replyForHistory });
 
     // If questions were answered, store the AI answers alongside questions
     if (session.questionsAnswered && l.topQuestions && l.topQuestions.length > 0 && (!l.questionAnswers || l.questionAnswers.length === 0)) {
@@ -2683,21 +2693,16 @@ app.post('/api/chat', async (req, res) => {
   try {
     let { message, sessionId } = req.body;
     if (!message) return res.json({ reply: 'Please send a message.' });
-
     if (!sessionId) {
       sessionId = 'web_' + Math.random().toString(36).slice(2) + '_' + Date.now();
     }
-
     const session = await getSession(sessionId);
     extractLeadData(session, message);
-
     const reply = await getClaudeReply(session, message);
-
     // Save lead the first time core info is complete
     if (!session.leadSaved && isCoreLeadComplete(session.leadData)) {
       session.leadSaved = true;
       console.log(`🎯 Lead complete: ${session.leadData.name}`);
-
       // Generate conversation summary asynchronously
       generateConversationSummary(session).then(async (summary) => {
         if (summary) {
@@ -2709,22 +2714,30 @@ app.post('/api/chat', async (req, res) => {
         sendNewLeadEmail(session.leadData).catch(console.error);
       }).catch(console.error);
     }
-
     // Save updated questions/answers even after initial lead save
     if (session.leadSaved && session.questionsAnswered && session.leadData.topQuestions && session.leadData.topQuestions.length > 0) {
       saveLead(session.leadData).catch(console.error);
     }
-
     await saveSession(session);
 
-    res.json({ reply, sessionId, leadData: session.leadData });
+    // Parse out SUGGEST_TOPICS if present
+    let cleanReply = reply;
+    let suggestedTopics = [];
+    const topicsMatch = reply.match(/SUGGEST_TOPICS:\[([^\]]+)\]/);
+    if (topicsMatch) {
+      try {
+        suggestedTopics = JSON.parse('[' + topicsMatch[1] + ']');
+      } catch(e) {}
+      cleanReply = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/, '').trim();
+    }
+
+    res.json({ reply: cleanReply, sessionId, leadData: session.leadData, suggestedTopics });
 
   } catch (err) {
     console.error('❌ /api/chat error:', err.message);
     res.json({ reply: 'Something went wrong. Please try again.' });
   }
 });
-
 // Backwards compatibility
 app.post('/chat', (req, res) => {
   req.url = '/api/chat';
