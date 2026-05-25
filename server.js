@@ -467,6 +467,197 @@ POST-INCORPORATION CHECKLIST:
 • Apply for ITIN to claim tax treaty benefits
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+KNOWLEDGE BASE — FEMA ODI COMPLIANCE (The Ultimate Master Guide)
+For Indian founders/businesses expanding overseas — India-side compliance obligations
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+WHAT IS FEMA ODI?
+Under the Foreign Exchange Management (Overseas Investment) Rules 2022, any Indian resident
+or Indian company holding equity, control, or financial commitment in an overseas entity must
+follow strict reporting rules managed by the Reserve Bank of India (RBI). Foreign lawyers
+and CPAs handle local compliance in their country — they are completely blind to India's
+capital controls. Comply Globally bridges this gap.
+
+MODULE 1 — PRE-INCORPORATION & LRS/ODI BOUNDARY:
+
+Q: Can I use my personal LRS quota of $250,000 to fund my foreign startup?
+A: Yes, but ONLY through the ODI framework. You cannot use fintech remittance apps or mark
+it as "gifting" or "maintenance." It must be declared to your Authorised Dealer (AD) Bank
+via Form OI. The bank issues a Unique Identification Number (UIN) for your foreign entity.
+Capitalising an overseas entity without a UIN is a severe FEMA violation.
+
+Q: I paid for domain names and cloud servers with my Indian credit card before the foreign
+company had a bank account. Is this a FEMA violation?
+A: Technically yes, if left unrecorded. These expenses must be formalised as either a
+pre-incorporation loan or converted to equity, then reported to your AD Bank during the
+initial Form OI submission.
+
+Q: Does registering a company via an online foreign platform (Delaware, Singapore ACRA etc.)
+mean I am FEMA-compliant?
+A: No. Those platforms handle local state filings only — they have zero integration with the
+RBI. Your foreign ownership is not legally recognised under Indian jurisdiction until your
+AD Bank stamps your Form OI filings and registers your ownership in the RBI ledger.
+
+Q: Can I set up a foreign company that holds no commercial operations and acts as a personal
+investment vehicle?
+A: No. Resident individuals are strictly prohibited from setting up a foreign shell or
+passive holding company without genuine operating business activity. This violates the core
+provisions of the 2022 Overseas Investment Rules.
+
+MODULE 2 — CORE REPORTING FRAMEWORK & CRITICAL TRAPS:
+
+Q: What is the single most critical rule founders breach with Indian banks for overseas
+investments?
+A: The Designated AD Bank rule. ALL transactions, reporting, capital remittances, and
+disinvestment filings for a specific foreign entity must go through ONE single branch of
+one AD Bank. You cannot remit from Bank A, file Form OI through Bank B, and close through
+Bank C. A single uncooperative branch can freeze your entire global compliance pipeline.
+
+Q: Do I need to file an Annual Performance Report (APR) if my foreign entity is completely
+dormant with zero revenue?
+A: Yes, without exception. Every Indian resident or entity with an ODI investment must
+submit an APR via their designated AD Bank by December 31 every year. Dormancy or zero
+revenue is irrelevant. Missing it triggers automatic blocking of future outward remittances
+and compounding penalties.
+
+Q: What is the FLA Return and how is it different from the APR?
+A: They are completely distinct filings to different RBI divisions.
+- APR: tracks operational/financial status of your foreign entity; filed via AD Bank.
+- FLA Return: direct statutory filing to the RBI portal by July 15 every year. Mandatory
+  if your Indian company has received FDI or made ODI. Missing either flags your company
+  as non-compliant in the central registry.
+
+Q: I received sweat equity or zero-cost founder stock in a foreign accelerator. No money
+left India — am I exempt from FEMA reporting?
+A: This is a major misconception. Any acquisition of foreign equity by an Indian resident —
+whether purchased, swapped, inherited, or received as sweat equity — constitutes an overseas
+investment under FEMA. You must file Form OI within 30 days of allocation to get a UIN.
+Operating an unrecorded foreign equity asset is an existential compliance risk.
+
+MODULE 3 — STRUCTURING, FLIPPING & ROUND-TRIPPING:
+
+Q: What is Round-Tripping under FEMA?
+A: Round-tripping is when an Indian resident sends money to a foreign entity, and that
+entity then reinvests back into India. The 2022 rules modified this: an Indian entity CAN
+invest in a foreign structure that has an India inbound link, provided the total structure
+does not exceed two layers of subsidiaries. Any structure beyond two layers or designed to
+bypass tax liability remains strictly illegal.
+
+Q: We are flipping our Indian startup to make it a subsidiary of a Delaware HoldCo. Can we
+do this without RBI permission?
+A: A flip via share-swap is permitted under the automatic route (no prior RBI approval
+required), but BOTH sides of the transaction must be reported via Form OI within prescribed
+timelines. Valuation of both entities must be certified by a registered Category-I Merchant
+Banker or Chartered Accountant. A valuation error can render the entire flip void.
+
+Q: Can my foreign entity extend an interest-free loan to my Indian entity?
+A: No. Any inflow into India structured as a loan from an overseas entity must comply
+strictly with External Commercial Borrowing (ECB) guidelines: All-In-Cost ceiling limits,
+minimum average maturity periods, and a Loan Registration Number (LRN) through an AD Bank
+before any money enters India.
+
+MODULE 4 — GLOBAL REVENUE & CAPITAL FLOWS:
+
+Q: My foreign company earns software subscription revenue from global clients. Can I keep
+that capital abroad indefinitely to invest in foreign stocks?
+A: This depends on your structure. If the foreign entity has genuine substance abroad and
+is truly independent, revenue belongs to it. However, if the entity is a shell or its
+effective management (POEM — Place of Effective Management) is determined to be in India,
+that revenue can be taxed in India. For Indian branch/individual exporters, FEMA requires
+all export proceeds to be repatriated to India within 9 months from the export date.
+
+Q: Can my foreign company pay me a monthly salary directly into my Indian savings account?
+A: Yes, but this creates immediate Indian income tax and FEMA tracking obligations. The
+inward remittance must be coded by your receiving bank under the correct purpose code
+(e.g., cross-border professional services) to avoid misclassification as an unauthorised
+capital injection.
+
+MODULE 5 — EMPLOYEE ESOPS & CROSS-BORDER STOCK OPTIONS:
+
+Q: My employer issued me ESOPs in its US parent company. Do I need to file Form OI?
+A: Under 2022 rules, ESOPs to Indian resident employees/directors of an Indian subsidiary
+fall under Overseas Portfolio Investment (OPI), not ODI, provided the equity remains below
+10%. The reporting burden shifts: the Indian subsidiary files a consolidated group reporting
+statement via its AD Bank to the RBI on a semi-annual basis.
+
+Q: When I sell ESOP shares or receive dividends, can I keep the money in a foreign
+brokerage account?
+A: No. FEMA explicitly requires that sale proceeds or dividend distributions from overseas
+investments held by resident individuals be repatriated to India within 90 days from the
+date of distribution. Leaving capital in foreign brokerage accounts or digital wallets
+violates mandatory repatriation rules.
+
+MODULE 6 — WINDING UP, EXITS & LATE RECTIFICATION:
+
+Q: The foreign business failed. Can we just let the local registry strike it off?
+A: No. This creates a permanent regulatory trap in India. The RBI keeps your foreign
+investment as an open, unresolved file under your UIN. You must legally wind up the entity
+abroad, repatriate all residual assets/liquidation funds to India, obtain a closure
+certificate from the foreign registry, and formally close the UIN ledger via your AD Bank.
+Walking away leaves you exposed to systemic non-compliance tracking.
+
+Q: I discovered I have been non-compliant with FEMA ODI for 3 years. Will I be prosecuted?
+A: No immediate prosecution. FEMA is primarily a civil economic regulation, not criminal
+(unless explicit fraud or national security breaches are found). Two rectification paths:
+1. Late Submission Fee (LSF): for delayed form/APR filings — pay via your AD Bank.
+2. Compounding of Contraventions: for deeper structural deviations — voluntarily submit
+   errors to the RBI, pay a calculated settlement fee, obtain formal absolution.
+
+Q: What are the penalties for delayed FEMA filings if I ignore them?
+A: Via voluntary LSF: highly manageable, fixed matrix based on delay duration. If the RBI
+or Directorate of Enforcement (ED) detects the breach independently during an audit, the
+penalties can scale to 300% of the total cross-border sum involved, plus ongoing daily fines.
+
+FEMA HEALTH CHECK — SELF-ASSESSMENT TOOL (12 Questions):
+Section 1 — Ownership & Structure:
+1. Was the foreign entity funded through a FEMA-permitted route?
+   Risk: High risk if funds moved informally or undocumented.
+2. Is the actual ownership structure clearly documented?
+   Risk: Layered or nominee structures create risk.
+3. Was the overseas entity set up for genuine business activity?
+   Risk: Shell-like entities attract scrutiny.
+
+Section 2 — RBI & FEMA Compliance:
+4. Was ODI/LRS reporting properly completed?
+   Risk: Missed RBI reporting is a common issue.
+5. Are annual overseas compliance obligations being tracked?
+   Risk: APR and ongoing compliance often missed.
+6. Is the foreign entity engaged only in FEMA-permitted activities?
+   Risk: Restricted sectors require deeper review.
+
+Section 3 — Money Flow & Banking:
+7. Are personal and company funds completely separated?
+   Risk: Mixing funds is a major red flag.
+8. Can every cross-border remittance be explained with documentation?
+   Risk: Banks increasingly require documentary trails.
+9. Are foreign bank accounts properly disclosed where required?
+   Risk: Undisclosed accounts create layered risks.
+
+Section 4 — Tax, Substance & Control:
+10. Is the overseas entity genuinely managed from outside India?
+    Risk: India-controlled foreign entities may trigger complications.
+11. Does the entity have sufficient commercial substance?
+    Risk: Low-substance structures face scrutiny.
+12. Are related-party transactions properly documented?
+    Risk: Poor documentation creates FEMA and tax exposure.
+
+SCORING GUIDE:
+- Yes = 0 points | Partially/Sometimes = 1 point | Not Sure/Unclear = 2 points | No = 3 points
+- 0–8 total = GREEN (Low risk — good compliance posture)
+- 9–18 total = AMBER (Moderate risk — gaps to address)
+- 19+ total = RED (High risk — immediate review required)
+
+COMPLY GLOBALLY FEMA SERVICES:
+- Pre-investment FEMA structuring and AD Bank selection
+- Form OI filing and UIN registration
+- Annual Performance Report (APR) filing
+- FLA Return filing (July 15 deadline)
+- Compounding applications and LSF regularisation
+- Flip/restructuring compliance (share-swap reporting)
+- Exit and disinvestment reporting
+- FEMA health check audits for existing structures
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 KNOWLEDGE BASE — CANADA (Entry Canada Guide 2026)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -620,7 +811,6 @@ KEY CANADIAN LEGAL/REGULATORY BODIES:
 PRIORITY SECTORS IN CANADA:
 • Clean technology, advanced manufacturing, artificial intelligence, life sciences, natural resources, digital services, industrial innovation
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 KNOWLEDGE BASE — UNITED KINGDOM (Entry UK Guide 2026)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1169,6 +1359,16 @@ When asked about UAE:
 - India-UAE CEPA in force; no US-UAE tax treaty (important: 30% withholding on US-source income)
 - Popular free zones: DMCC, JAFZA, DAFZA, DIFC, ADGM, RAKEZ, Dubai South
 - Bank account opening often the slowest step; in-person visits typically required
+
+When asked about FEMA / ODI / India-side compliance:
+- Always clarify that FEMA is the India-side obligation — separate from the foreign country's local compliance
+- The 3 most common violations: (1) not filing Form OI to get a UIN before remitting funds, (2) missing the annual APR (December 31 deadline every year, even for dormant entities), (3) missing the FLA Return (July 15 deadline)
+- For sweat equity: always flag that acquisition of foreign equity — even without cash outflow — requires Form OI within 30 days
+- For flips/share-swaps: permitted under automatic route but both sides must be reported; valuation must be certified
+- For rectification: LSF for simple filing delays, Compounding for structural violations — FEMA is civil not criminal
+- Always mention Comply Globally's FEMA services: Form OI, APR, FLA Return, Compounding, Health Check audits
+- Offer the 12-question FEMA Health Check if the user seems to have an existing foreign structure or is unsure of their compliance status
+- Penalties can reach 300% of the transaction amount if ED detects the breach — so early voluntary compliance via LSF is always better
 
 When asked about multiple countries:
 - Address each country specifically with real facts and numbers
@@ -2620,7 +2820,7 @@ You have: Name=${l.name}, Contact=${l.email || l.phone}, Country=${l.currentCoun
 
 async function getClaudeReply(session, userMessage) {
   session.history.push({ role: 'user', content: userMessage });
-  if (session.history.length > 24) session.history = session.history.slice(-24);
+  if (session.history.length > 16) session.history = session.history.slice(-16);
 
   const l = session.leadData;
   const known = [
@@ -2686,7 +2886,7 @@ async function getClaudeReply(session, userMessage) {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 700,
+        max_tokens: 900,
         system: SYSTEM_PROMPT + contextNote + phaseNote + threeQNote + answersNote + handoffNote + adaptiveNote,
         messages: session.history,
       }),
@@ -2767,16 +2967,16 @@ app.post('/api/chat', async (req, res) => {
     if (!session.leadSaved && isCoreLeadComplete(session.leadData)) {
       session.leadSaved = true;
       console.log(`🎯 Lead complete: ${session.leadData.name}`);
-      // Generate conversation summary asynchronously
-      generateConversationSummary(session).then(async (summary) => {
-        if (summary) {
-          session.leadData.conversationSummary = summary;
-          await saveSession(session);
-        }
-        saveLead(session.leadData).catch(console.error);
-        appendToSheet(session.leadData).catch(console.error);
-        sendNewLeadEmail(session.leadData).catch(console.error);
-      }).catch(console.error);
+      // Generate summary first, then save everything together so summary is never lost
+      try {
+        const summary = await generateConversationSummary(session);
+        if (summary) session.leadData.conversationSummary = summary;
+      } catch(e) {
+        console.warn('⚠️ Summary generation failed:', e.message);
+      }
+      saveLead(session.leadData).catch(console.error);
+      appendToSheet(session.leadData).catch(console.error);
+      sendNewLeadEmail(session.leadData).catch(console.error);
     }
     // Save updated questions/answers even after initial lead save
     if (session.leadSaved && session.questionsAnswered && session.leadData.topQuestions && session.leadData.topQuestions.length > 0) {
@@ -2790,7 +2990,13 @@ app.post('/api/chat', async (req, res) => {
     if (topicsMatch) {
       try {
         suggestedTopics = JSON.parse('[' + topicsMatch[1] + ']');
-      } catch(e) {}
+      } catch(e) {
+        // Fallback: handle smart quotes or malformed JSON from Claude
+        suggestedTopics = topicsMatch[1]
+          .split(/","/)
+          .map(s => s.replace(/^["\u201C\u2018]|["\u201D\u2019]$/g, '').trim())
+          .filter(Boolean);
+      }
       cleanReply = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/, '').trim();
     }
     // NEW: include conversationPhase so frontend knows when to show bubbles
