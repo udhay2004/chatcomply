@@ -202,6 +202,7 @@ function freshSession(sessionId) {
       lastMenu:           null, // { options: string[4], context: string, createdAt: number }
       leadSaved:          false,
       contactRequested:   false, // user asked to be contacted by human
+      contactNudgeSent:   false, // one-time soft re-ask in advisory if no contact yet
     },
     createdAt:   new Date(),
     lastActive:  new Date(),
@@ -230,6 +231,7 @@ async function getSession(sessionId) {
   s.state.lastMenu         = s.state.lastMenu         || null;
   s.state.leadSaved        = s.state.leadSaved        || false;
   s.state.contactRequested = s.state.contactRequested || false;
+  s.state.contactNudgeSent = s.state.contactNudgeSent || false;
   s.history = s.history || [];
 
   cSet(sessionId, s);
@@ -581,10 +583,15 @@ function buildPhaseHint(mem, state) {
   }
 
   if (phase === 'onboarding_contact') {
-    return `\n\n[PHASE: onboarding_contact. You have name and target market but no contact details yet. Continue the conversation naturally. Within your reply, warmly ask: "Could I also grab your email or WhatsApp number, ${mem.name}? That way our team can follow up with any details or a custom quote." Do NOT include the follow-up menu block yet.]`;
+    return `\n\n[PHASE: onboarding_contact. You have name (${mem.name}) and target market but NO contact details yet. Answer any question they ask helpfully and concisely, then ALWAYS end your reply with exactly this: "Before we dive deeper, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a custom quote and any details specific to your situation." Be warm, not pushy. Do NOT include the follow-up menu block in this phase.]`;
   }
 
-  // advisory phase — full mode
+  // advisory phase — full mode, but if we still have no contact details, add a soft one-time re-ask
+  if (phase === 'advisory' && !mem.email && !mem.phone && !state.contactNudgeSent) {
+    state.contactNudgeSent = true;
+    return `\n\n[CONTACT NUDGE — one time only: You are in advisory mode but still have no contact details for ${mem.name}. Answer their question fully as normal. Then at the very end, add one line naturally: "By the way ${mem.name}, could I grab your email so our team can send you tailored follow-up on this?" Do NOT repeat this nudge in future messages.]`;
+  }
+
   return '';
 }
 
