@@ -1278,7 +1278,7 @@ app.post('/api/chat', async (req, res) => {
     const session = await getSession(sessionId);
     const { memory: mem, state } = session;
 
-    console.log(`\n📩 [${sessionId.slice(-8)}] "${message}"`);
+    console.log(`\n📩 [${sessionId.slice(-8)}] Phase: ${state.phase}, Message: "${message}"`);
 
     // ── FIRST MESSAGE: send welcome and ask name ──
     if (session.history.length === 0 && (state.phase === 'new' || state.phase === 'onboarding_name')) {
@@ -1294,44 +1294,120 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // ── ENTITY EXTRACTION (now async, returns validationError) ──
-    // CHANGE 1: Extract name first (synchronous)
+    // ── NAME EXTRACTION (ALWAYS do this first, regardless of phase) ──
     if (!mem.name) {
       const n = extractName(message);
       if (n) { 
         mem.name = n; 
         console.log(`✅ Name locked: ${n}`);
+        // Advance phase after getting name
+        advancePhase(session);
+        await saveSession(session);
+        
+        // After getting name, ask for country
+        const nameReply = `Nice to meet you, ${n}! 🌟\n\nWhich market are you looking to expand into? (e.g., UAE, Singapore, UK, USA, India)`;
+        session.history.push({ role: 'assistant', content: nameReply });
+        return res.json({
+          reply: nameReply,
+          sessionId,
+          menu: null,
+          phase: state.phase,
+        });
       }
     }
 
-    // CHANGE 2: Extract entities with validation (async)
-    const { updates: entityUpdates, validationError } = await extractEntities(message, mem);
-
-    // CHANGE 3: Handle validation error immediately if contact info is invalid
-    if (validationError) {
-      console.log(`🚫 VALIDATION FAILED: ${validationError.type} - ${validationError.message.substring(0, 100)}`);
+    // ── COUNTRY EXTRACTION (if we have name but no country) ──
+    if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
+      // Check if message contains a country
+      let foundCountry = null;
+      for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
+        if (message.toLowerCase().includes(kw)) {
+          foundCountry = country;
+          break;
+        }
+      }
       
-      // Store only the validation response in history, not the invalid user message
-      session.history.push({ role: 'assistant', content: validationError.message });
-      await saveSession(session);
-      
-      return res.json({
-        reply: validationError.message,
-        sessionId,
-        menu: null,
-        phase: state.phase,
-        validationFailed: true,  // Frontend can use this
-        errorType: validationError.type  // 'email' or 'phone'
-      });
+      if (foundCountry) {
+        mem.targetCountry = foundCountry;
+        mem.targetCountries = [foundCountry];
+        console.log(`✅ Country locked: ${foundCountry}`);
+        advancePhase(session);
+        await saveSession(session);
+        
+        // After getting country, ask for contact info
+        const countryReply = `Great choice, ${mem.name}! ${foundCountry} is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email address? Our team will use it to send you a custom quote and specific insights for ${foundCountry}.`;
+        session.history.push({ role: 'assistant', content: countryReply });
+        return res.json({
+          reply: countryReply,
+          sessionId,
+          menu: null,
+          phase: state.phase,
+        });
+      } else {
+        // No country detected, ask again
+        const askAgain = `Which market are you looking to expand into, ${mem.name}? For example: UAE, Singapore, UK, USA, or India.`;
+        session.history.push({ role: 'assistant', content: askAgain });
+        await saveSession(session);
+        return res.json({
+          reply: askAgain,
+          sessionId,
+          menu: null,
+          phase: state.phase,
+        });
+      }
     }
 
-    // Apply valid entity updates
-    if (Object.keys(entityUpdates).length > 0) {
-      Object.assign(mem, entityUpdates);
-      console.log(`📝 Entities saved:`, Object.keys(entityUpdates));
+    // ── EMAIL VALIDATION (ONLY in onboarding_contact phase or when expecting email) ──
+    if (!mem.email && (state.phase === 'onboarding_contact' || state.phase === 'advisory')) {
+      // Check if this looks like an email
+      const hasAtSymbol = message.includes('@');
+      const hasValidFormat = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/.test(message);
+      
+      if (hasAtSymbol && hasValidFormat) {
+        // Validate the email
+        const emailCheck = await validateEmail(message);
+        if (emailCheck.valid) {
+          mem.email = message.trim().toLowerCase();
+          console.log(`✅ Email validated: ${mem.email}`);
+          advancePhase(session);
+          await saveSession(session);
+          
+          const emailReply = `Perfect, ${mem.name}! I've got your email as ${mem.email}. 📧\n\nOur team will reach out to you soon with tailored information about expanding to ${mem.targetCountry}.\n\nNow, to help you better - what specific aspect of expansion interests you most? (e.g., incorporation, banking, taxation, compliance)`;
+          session.history.push({ role: 'assistant', content: emailReply });
+          return res.json({
+            reply: emailReply,
+            sessionId,
+            menu: null,
+            phase: state.phase,
+          });
+        } else {
+          // Invalid email format
+          const errorReply = getEmailFeedback(emailCheck.reason, mem.name);
+          session.history.push({ role: 'assistant', content: errorReply });
+          await saveSession(session);
+          return res.json({
+            reply: errorReply,
+            sessionId,
+            menu: null,
+            phase: state.phase,
+            validationFailed: true,
+          });
+        }
+      } else if (message.trim().length > 0 && !hasAtSymbol) {
+        // User typed something that's not an email - ask for email properly
+        const askForEmail = `I need a valid email address to send you information about ${mem.targetCountry}, ${mem.name}. Could you please share your email in the format name@example.com?`;
+        session.history.push({ role: 'assistant', content: askForEmail });
+        await saveSession(session);
+        return res.json({
+          reply: askForEmail,
+          sessionId,
+          menu: null,
+          phase: state.phase,
+        });
+      }
     }
 
-    // Topic tracking
+    // ── TOPIC TRACKING (for advisory phase) ──
     const topic = inferTopic(message);
     if (topic && !state.topicsDiscussed.includes(topic)) {
       state.topicsDiscussed.push(topic);
@@ -1340,59 +1416,16 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Advance phase
-    advancePhase(session);
-
     // ── DETERMINISTIC MEMORY RECALL ──
     const memoryReply = checkMemoryRecall(message, session);
     if (memoryReply) {
-      session.history.push({ role: 'user',      content: truncateMsg(message)    });
+      session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(memoryReply) });
       await saveSession(session);
       return res.json({ reply: memoryReply, sessionId, menu: null, phase: state.phase });
     }
 
-    // ── MENU SELECTION ──
-    const numMatch = message.toLowerCase().trim().match(/^\s*(?:option\s*|question\s*|no\.?\s*|#\s*)?([1-4])\s*$/);
-    if (numMatch && state.lastMenu) {
-      const num      = parseInt(numMatch[1]);
-      const selected = state.lastMenu.options[num - 1];
-      if (selected) {
-        console.log(`📋 Menu ${num} selected: "${selected}"`);
-        const kbSection = retrieveKBChunks(selected);
-        const menuHint  = `\n\n[INSTRUCTION: The user selected option ${num}: "${selected}" from the active menu. Answer this question fully and accurately from the knowledge base. Include a new 4-option follow-up menu after your answer.]`;
-        const { reply, rateLimited, waitSec } = await callClaude(session, selected, kbSection, menuHint);
-
-        if (rateLimited) {
-          return res.json({ reply: `Just a moment — I'll have your answer shortly. ⏳`, sessionId, menu: null, phase: state.phase });
-        }
-        if (!reply) {
-          return res.json({ reply: `I hit a brief snag there. Please try again!`, sessionId, menu: null, phase: state.phase });
-        }
-
-        session.history.push({ role: 'user',      content: message                 });
-        session.history.push({ role: 'assistant', content: truncateMsg(reply)       });
-
-        const newMenu = parseMenuFromReply(reply);
-        state.lastMenu = newMenu
-          ? { options: newMenu, context: selected, createdAt: Date.now() }
-          : null;
-
-        const cleanReply = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/g, '').trim();
-        await saveSession(session);
-        return res.json({ reply: cleanReply, sessionId, menu: newMenu, phase: state.phase });
-      }
-    }
-
-    if (numMatch && !state.lastMenu) {
-      const fallback = `I don't have an active menu right now — feel free to ask me anything directly!`;
-      session.history.push({ role: 'user',      content: message   });
-      session.history.push({ role: 'assistant', content: fallback  });
-      await saveSession(session);
-      return res.json({ reply: fallback, sessionId, menu: null, phase: state.phase });
-    }
-
-    // ── STANDARD CLAUDE RESPONSE ──
+    // ── STANDARD CLAUDE RESPONSE (for advisory phase) ──
     const kbSection = retrieveKBChunks(message);
     const phaseHint = buildPhaseHint(mem, state);
 
@@ -1409,7 +1442,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const replyForHistory = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/g, '').trim();
-    session.history.push({ role: 'user',      content: truncateMsg(message)        });
+    session.history.push({ role: 'user', content: truncateMsg(message) });
     session.history.push({ role: 'assistant', content: truncateMsg(replyForHistory) });
 
     const newMenu = parseMenuFromReply(reply);
@@ -1438,14 +1471,14 @@ app.post('/api/chat', async (req, res) => {
     return res.json({
       reply: cleanReply,
       sessionId,
-      menu:  newMenu || null,
+      menu: newMenu || null,
       phase: state.phase,
       leadData: {
-        name:           mem.name,
-        email:          mem.email,
-        phone:          mem.phone,
-        targetCountry:  mem.targetCountry,
-        serviceNeeded:  mem.serviceNeeded,
+        name: mem.name,
+        email: mem.email,
+        phone: mem.phone,
+        targetCountry: mem.targetCountry,
+        serviceNeeded: mem.serviceNeeded,
       },
     });
 
