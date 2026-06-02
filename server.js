@@ -593,52 +593,48 @@ const EXPAND_INTENT_RE   = /expand|incorporat|setup|set up|open|register|move|la
 const NEGATION_RE        = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
 
 // ✅ Now async because validateEmail does a DNS check
-// ✅ Now async because validateEmail does a DNS check
 async function extractEntities(msg, mem) {
   const lower   = msg.toLowerCase();
   const updates = {};
-  let   validationError = null;  // ← new: set if user gave invalid contact info
+  let   validationError = null;
 
   // ── Email ──
   if (!mem.email) {
     let rawEmail = null;
-    let cleanedEmail = null;
     
-    const ownershipMatch = msg.match(EMAIL_OWNERSHIP_RE);
-    if (ownershipMatch) {
-      rawEmail = ownershipMatch[1];
-    } else if (/\bmy\b/i.test(msg)) {
-      const genericMatch = msg.match(EMAIL_RE);
-      if (genericMatch) rawEmail = genericMatch[0];
-    } else {
-      // Check for any email pattern
-      const anyEmail = msg.match(EMAIL_RE);
-      if (anyEmail) {
-        rawEmail = anyEmail[0];
+    // STRICT: Only extract if message has @ symbol and proper domain pattern
+    const hasAtSymbol = msg.includes('@');
+    const hasValidFormat = /@[^.]+\.[a-z]{2,}/i.test(msg);
+    
+    if (hasAtSymbol && hasValidFormat) {
+      const ownershipMatch = msg.match(EMAIL_OWNERSHIP_RE);
+      if (ownershipMatch) {
+        rawEmail = ownershipMatch[1];
+      } else if (/\bmy\b/i.test(msg)) {
+        const genericMatch = msg.match(EMAIL_RE);
+        if (genericMatch) rawEmail = genericMatch[0];
       } else {
-        // Try to extract and fix typos from the entire message
-        // Look for patterns like "username gmail" or "username at gmail dot com"
-        const words = msg.split(/\s+/);
-        for (let i = 0; i < words.length - 1; i++) {
-          const possibleEmail = words[i] + ' ' + words[i+1];
-          const cleaned = preCleanEmail(possibleEmail);
-          if (cleaned.cleaned && cleaned.hadTypo) {
-            rawEmail = cleaned.cleaned;
-            cleanedEmail = rawEmail;
-            console.log(`🔧 Fixed email typo from phrase: "${possibleEmail}" → "${rawEmail}"`);
-            break;
-          }
-        }
+        const anyEmail = msg.match(EMAIL_RE);
+        if (anyEmail) rawEmail = anyEmail[0];
       }
     }
-
+    
+    // Check if user mentioned email but provided garbage
+    const mentionedEmail = /\b(email|mail|contact|reach)\b/i.test(msg);
+    const isSingleWordNoAt = !msg.includes('@') && !msg.includes(' ') && msg.length < 30;
+    
+    if (mentionedEmail && isSingleWordNoAt && !rawEmail) {
+      validationError = {
+        type: 'email',
+        message: getEmailFeedback('format', mem.name),
+      };
+      return { updates, validationError };
+    }
+    
     if (rawEmail) {
-      // Use the cleaned version if available
-      const emailToValidate = cleanedEmail || rawEmail;
-      const emailCheck = await validateEmail(emailToValidate, { skipDNS: false });
-      
+      const emailCheck = await validateEmail(rawEmail, { skipDNS: false });
       if (emailCheck.valid) {
-        updates.email = emailCheck.cleaned || emailToValidate.trim().toLowerCase();
+        updates.email = emailCheck.cleaned || rawEmail.trim().toLowerCase();
         console.log(`✅ Email validated: ${updates.email}`);
       } else {
         console.log(`❌ Email rejected (${emailCheck.reason}): ${rawEmail}`);
