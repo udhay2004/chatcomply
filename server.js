@@ -3,19 +3,14 @@
 /**
  * ============================================================
  *  COMPLY GLOBALLY — Website AI Chatbot Backend
- *  v2.0 — WhatsApp-Parity Edition
+ *  v2.1 — Contact Validation Edition
  *
- *  Aligned with WhatsApp bot (server.js v4.8) flow:
- *  - Same onboarding: name → target country → email/phone
- *  - Same BM25 KB retrieval (kbRetrieval.js + kb.json)
- *  - Same 4-option menu engine (SUGGEST_TOPICS → stored menu)
- *  - Same deterministic memory recall (name/country/context)
- *  - Same entity extraction (countries, services, email, phone)
- *  - Same rolling conversation summary every 5 messages
- *  - Same context block injected per request
- *  - Google Sheets + MongoDB lead storage retained
- *  - Human handoff replaced with "we'll contact you" flow
- *    (no live agent takeover on web)
+ *  Changes from v2.0:
+ *  - validateEmail(): format + typo TLD + fake domain + DNS MX check
+ *  - validatePhone(): India-aware (10 digits, 6-9 prefix) + E.164 international
+ *  - extractEntities() now calls both validators before accepting contact info
+ *  - Invalid contact triggers a friendly correction prompt instead of saving
+ *  - All other logic (onboarding, KB, menus, leads, summary) unchanged
  * ============================================================
  */
 
@@ -105,12 +100,10 @@ async function connectMongo() {
     sessionsCol = db.collection('web_sessions');
     leadsCol    = db.collection('leads');
 
-    // Drop-and-recreate indexes cleanly (avoids "same name" errors on restart)
     for (const col of [sessionsCol]) {
       try { await col.dropIndex('sessionId_1'); } catch (_) {}
       await col.createIndex({ sessionId: 1 }, { unique: true });
     }
-    // TTL: auto-expire sessions after 24 hours of inactivity
     try { await sessionsCol.dropIndex('lastActive_1'); } catch (_) {}
     await sessionsCol.createIndex({ lastActive: 1 }, { expireAfterSeconds: 86400 });
 
@@ -167,7 +160,6 @@ function cGet(key) {
 
 // ─────────────────────────────────────────────
 // SESSION STRUCTURE
-// Mirrors WhatsApp bot: history, memory, state all in one doc
 // ─────────────────────────────────────────────
 const MAX_MSG_CHARS = 800;
 
@@ -179,13 +171,11 @@ function truncateMsg(text) {
 function freshSession(sessionId) {
   return {
     sessionId,
-    // ── history (kept to last 16 messages, each truncated at 800 chars) ──
     history: [],
-    // ── memory: locked validated entities ──
     memory: {
       name:               null,
-      targetCountries:    [],   // all countries ever discussed
-      targetCountry:      null, // mirrors targetCountries[0]
+      targetCountries:    [],
+      targetCountry:      null,
       currentCountry:     null,
       servicesDiscussed:  [],
       serviceNeeded:      null,
@@ -194,15 +184,13 @@ function freshSession(sessionId) {
       companyName:        null,
       conversationSummary: '',
     },
-    // ── state: flow control ──
     state: {
-      // Phases: new → onboarding_name → onboarding_country → onboarding_contact → advisory
       phase:              'new',
       topicsDiscussed:    [],
-      lastMenu:           null, // { options: string[4], context: string, createdAt: number }
+      lastMenu:           null,
       leadSaved:          false,
-      contactRequested:   false, // user asked to be contacted by human
-      contactNudgeSent:   false, // one-time soft re-ask in advisory if no contact yet
+      contactRequested:   false,
+      contactNudgeSent:   false,
     },
     createdAt:   new Date(),
     lastActive:  new Date(),
@@ -220,7 +208,6 @@ async function getSession(sessionId) {
   }
   if (!s) s = freshSession(sessionId);
 
-  // Backwards-compat: ensure all sub-objects exist if loaded from old schema
   s.memory = s.memory || {};
   s.memory.targetCountries   = s.memory.targetCountries   || [];
   s.memory.servicesDiscussed = s.memory.servicesDiscussed || [];
@@ -254,7 +241,7 @@ async function saveSession(s) {
 }
 
 // ─────────────────────────────────────────────
-// COUNTRY MAP (same as WhatsApp bot)
+// COUNTRY MAP
 // ─────────────────────────────────────────────
 const COUNTRY_MAP = {
   'uae': 'UAE', 'dubai': 'UAE', 'abu dhabi': 'UAE', 'sharjah': 'UAE',
@@ -293,7 +280,7 @@ const ALL_COUNTRY_WORDS = new Set([
 ]);
 
 // ─────────────────────────────────────────────
-// NAME EXTRACTION (strict — same as WhatsApp bot)
+// NAME EXTRACTION
 // ─────────────────────────────────────────────
 const NAME_BLACKLIST = new Set([
   'hi','hello','hey','okay','ok','yes','no','sure','thanks','thank','please',
@@ -319,7 +306,7 @@ const NAME_BLACKLIST = new Set([
   'october','november','december','yesterday','today','tomorrow',
 ]);
 
-const NAME_INTRO_RE     = /(?:my name is|this is|you can call me|they call me)\s+([A-Za-z][a-zA-Z'\-]{1,30}(?:\s+[A-Za-z][a-zA-Z'\-]{1,30}){0,2})/i;
+const NAME_INTRO_RE      = /(?:my name is|this is|you can call me|they call me)\s+([A-Za-z][a-zA-Z'\-]{1,30}(?:\s+[A-Za-z][a-zA-Z'\-]{1,30}){0,2})/i;
 const NAME_STANDALONE_RE = /^([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
 
@@ -367,7 +354,163 @@ function extractName(msg) {
 }
 
 // ─────────────────────────────────────────────
-// ENTITY EXTRACTION (same as WhatsApp bot)
+// ✅ NEW: EMAIL & PHONE VALIDATION
+// ─────────────────────────────────────────────
+
+/**
+ * validateEmail(email)
+ * Returns { valid: boolean, reason: string|null }
+ * Checks: format → typo TLDs → fake/disposable domains → DNS MX lookup
+ */
+async function validateEmail(email) {
+  if (!email || typeof email !== 'string') {
+    return { valid: false, reason: 'empty' };
+  }
+
+  const trimmed = email.trim().toLowerCase();
+
+  // 1. Format check
+  const FORMAT_RE = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/;
+  if (!FORMAT_RE.test(trimmed)) {
+    return { valid: false, reason: 'format' };
+  }
+
+  // 2. Common typo TLDs
+  const TYPO_TLDS = ['.cmo', '.cim', '.con', '.cpm', '.ocm', '.kom',
+                     '.conm', '.coom', '.gmal', '.gmial', '.yaho', '.yhaoo',
+                     '.gamil', '.gmaill', '.cm', '.om'];
+  if (TYPO_TLDS.some(t => trimmed.endsWith(t))) {
+    return { valid: false, reason: 'typo_tld' };
+  }
+
+  // 3. Obvious fake/disposable domain blacklist
+  const [, domain] = trimmed.split('@');
+  const FAKE_DOMAINS = new Set([
+    'test.com', 'example.com', 'example.org', 'example.net',
+    'fake.com', 'noemail.com', 'noreply.com', 'invalid.com',
+    'mailinator.com', 'guerrillamail.com', 'trashmail.com', 'throwam.com',
+    'yopmail.com', 'sharklasers.com', 'spam4.me', 'tempmail.com',
+    'temp-mail.org', 'dispostable.com', 'maildrop.cc', 'mailnull.com',
+    'smelly.com', 'abc.com', 'xyz.com', 'aaa.com', 'bbb.com', '123.com',
+    'asdf.com', 'qwerty.com', 'dummy.com', 'blah.com', 'test.in',
+  ]);
+  if (FAKE_DOMAINS.has(domain)) {
+    return { valid: false, reason: 'fake_domain' };
+  }
+
+  // 4. DNS MX record lookup — verifies the domain actually accepts mail
+  //    Uses Google DNS-over-HTTPS (no extra package needed)
+  //    Fails open: if DNS lookup errors, we pass through rather than block a valid email
+  try {
+    const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`;
+    const dnsRes = await fetch(dnsUrl, { timeout: 4000 });
+    if (dnsRes.ok) {
+      const dnsData = await dnsRes.json();
+      // Status 3 = NXDOMAIN (domain doesn't exist at all)
+      if (dnsData.Status === 3) {
+        return { valid: false, reason: 'domain_not_found' };
+      }
+      if (dnsData.Status !== 0) {
+        return { valid: false, reason: 'domain_not_found' };
+      }
+      // Status 0 with no Answer AND no Authority = likely non-existent domain
+      if (!dnsData.Answer && !dnsData.Authority) {
+        return { valid: false, reason: 'domain_not_found' };
+      }
+    }
+  } catch (dnsErr) {
+    console.warn('⚠️ DNS MX check failed (non-blocking):', dnsErr.message);
+  }
+
+  return { valid: true, reason: null };
+}
+
+/**
+ * validatePhone(rawPhone, currentCountry)
+ * Returns { valid: boolean, reason: string|null, cleaned: string|null }
+ *
+ * India context (+91 prefix, or currentCountry=India):
+ *   - Exactly 10 digits after stripping country code
+ *   - Must start with 6, 7, 8, or 9
+ *
+ * International:
+ *   - E.164: 7–15 digits after stripping +
+ *   - Rejects all-same-digit placeholders (9999999999 etc.)
+ */
+function validatePhone(rawPhone, currentCountry) {
+  if (!rawPhone) return { valid: false, reason: 'empty', cleaned: null };
+
+  const stripped = rawPhone.replace(/[\s\-().]/g, '');
+
+  if (!/^\+?\d+$/.test(stripped)) {
+    return { valid: false, reason: 'format', cleaned: null };
+  }
+
+  const digitsOnly = stripped.replace(/^\+/, '');
+
+  // India-specific validation
+  const isIndiaContext =
+    stripped.startsWith('+91') ||
+    stripped.startsWith('091') ||
+    (currentCountry === 'India' && !stripped.startsWith('+'));
+
+  if (isIndiaContext) {
+    let local = digitsOnly;
+    if (local.startsWith('91') && local.length === 12) local = local.slice(2);
+    if (local.startsWith('0')  && local.length === 11) local = local.slice(1);
+
+    if (local.length < 10) return { valid: false, reason: 'too_short_india',  cleaned: null };
+    if (local.length > 10) return { valid: false, reason: 'too_long_india',   cleaned: null };
+    if (!/^[6-9]/.test(local)) return { valid: false, reason: 'invalid_india_prefix', cleaned: null };
+    if (/^(.)\1{9}$/.test(local)) return { valid: false, reason: 'placeholder', cleaned: null };
+    if (local === '1234567890' || local === '0123456789') return { valid: false, reason: 'placeholder', cleaned: null };
+
+    return { valid: true, reason: null, cleaned: '+91' + local };
+  }
+
+  // International (non-India)
+  if (digitsOnly.length < 7)  return { valid: false, reason: 'too_short',   cleaned: null };
+  if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',    cleaned: null };
+  if (/^(.)\1+$/.test(digitsOnly)) return { valid: false, reason: 'placeholder', cleaned: null };
+
+  const cleaned = stripped.startsWith('+') ? stripped : '+' + digitsOnly;
+  return { valid: true, reason: null, cleaned };
+}
+
+// Human-friendly feedback messages for invalid contact info
+const EMAIL_FEEDBACK = {
+  format:           (name) => `Hmm, that email address doesn't look quite right${name ? ', ' + name : ''} — it might be missing the @ symbol or a proper domain ending. Could you double-check and share it again?`,
+  typo_tld:         (name) => `There might be a small typo in that email${name ? ', ' + name : ''} — the ending doesn't look right (e.g. ".cmo" instead of ".com"). Could you re-enter it?`,
+  fake_domain:      (name) => `That doesn't look like a real email address${name ? ', ' + name : ''}. Our team will need a valid email to follow up — could you share your actual one?`,
+  domain_not_found: (name) => `I couldn't verify that email domain${name ? ', ' + name : ''} — it doesn't appear to exist. Could you double-check the spelling and try again?`,
+  default:          (name) => `That email doesn't seem to be valid${name ? ', ' + name : ''}. Could you share it again?`,
+};
+
+const PHONE_FEEDBACK = {
+  too_short_india:      (name) => `Indian mobile numbers need to be 10 digits after the +91${name ? ', ' + name : ''} — that one looks a bit short. Could you check and re-enter it?`,
+  too_long_india:       (name) => `That number looks a bit long for an Indian mobile${name ? ', ' + name : ''}. It should be 10 digits after +91 — could you double-check?`,
+  invalid_india_prefix: (name) => `Indian mobile numbers start with 6, 7, 8, or 9${name ? ', ' + name : ''} — that one doesn't seem right. Could you re-enter it?`,
+  too_short:            (name) => `That phone number looks too short to be valid${name ? ', ' + name : ''}. Could you share the full number with the country code (e.g. +91 98765 43210)?`,
+  too_long:             (name) => `That number seems too long${name ? ', ' + name : ''}. Could you double-check and re-enter it?`,
+  placeholder:          (name) => `That doesn't look like a real phone number${name ? ', ' + name : ''} 😊. Could you share your actual mobile number so our team can reach you?`,
+  format:               (name) => `That doesn't look like a valid phone number${name ? ', ' + name : ''}. Could you re-enter it with the country code (e.g. +91 98765 43210)?`,
+  default:              (name) => `That phone number doesn't seem valid${name ? ', ' + name : ''}. Could you share it again?`,
+};
+
+function getEmailFeedback(reason, name) {
+  const fn = EMAIL_FEEDBACK[reason] || EMAIL_FEEDBACK.default;
+  return fn(name || null);
+}
+function getPhoneFeedback(reason, name) {
+  const fn = PHONE_FEEDBACK[reason] || PHONE_FEEDBACK.default;
+  return fn(name || null);
+}
+
+// ─────────────────────────────────────────────
+// ENTITY EXTRACTION
+// ✅ CHANGE: email and phone are now validated before being stored.
+//    Returns validationError = { type: 'email'|'phone', message: string }
+//    when invalid contact is detected, so the chat endpoint can reply immediately.
 // ─────────────────────────────────────────────
 const SERVICE_MAP = {
   'incorporat': 'Incorporation', 'register': 'Incorporation', 'set up': 'Incorporation',
@@ -385,35 +528,60 @@ const PHONE_RE           = /(?:\+?\d[\d\s\-]{8,14}\d)/;
 const EXPAND_INTENT_RE   = /expand|incorporat|setup|set up|open|register|move|launch|start|going to|looking at|consider|want to|thinking about/i;
 const NEGATION_RE        = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
 
-function extractEntities(msg, mem) {
+// ✅ Now async because validateEmail does a DNS check
+async function extractEntities(msg, mem) {
   const lower   = msg.toLowerCase();
   const updates = {};
+  let   validationError = null;  // ← new: set if user gave invalid contact info
 
-  // Email
+  // ── Email ──
   if (!mem.email) {
+    let rawEmail = null;
     const ownershipMatch = msg.match(EMAIL_OWNERSHIP_RE);
     if (ownershipMatch) {
-      updates.email = ownershipMatch[1];
+      rawEmail = ownershipMatch[1];
     } else if (/\bmy\b/i.test(msg)) {
       const genericMatch = msg.match(EMAIL_RE);
-      if (genericMatch) updates.email = genericMatch[0];
+      if (genericMatch) rawEmail = genericMatch[0];
     } else {
-      // On website, also capture any standalone email (user is probably sharing their own)
       const anyEmail = msg.match(EMAIL_RE);
-      if (anyEmail) updates.email = anyEmail[0];
+      if (anyEmail) rawEmail = anyEmail[0];
+    }
+
+    if (rawEmail) {
+      const emailCheck = await validateEmail(rawEmail);
+      if (emailCheck.valid) {
+        updates.email = rawEmail.trim().toLowerCase();
+        console.log(`✅ Email validated: ${updates.email}`);
+      } else {
+        console.log(`❌ Email rejected (${emailCheck.reason}): ${rawEmail}`);
+        validationError = {
+          type: 'email',
+          message: getEmailFeedback(emailCheck.reason, mem.name),
+        };
+      }
     }
   }
 
-  // Phone (website-specific: capture any phone number shared)
-  if (!mem.phone) {
+  // ── Phone ──
+  if (!mem.phone && !validationError) {
     const phoneMatch = msg.match(PHONE_RE);
     if (phoneMatch) {
-      const cleaned = phoneMatch[0].replace(/[\s\-]/g, '');
-      if (cleaned.length >= 10) updates.phone = cleaned;
+      const phoneCheck = validatePhone(phoneMatch[0], mem.currentCountry);
+      if (phoneCheck.valid) {
+        updates.phone = phoneCheck.cleaned;
+        console.log(`✅ Phone validated: ${updates.phone}`);
+      } else {
+        console.log(`❌ Phone rejected (${phoneCheck.reason}): ${phoneMatch[0]}`);
+        validationError = {
+          type: 'phone',
+          message: getPhoneFeedback(phoneCheck.reason, mem.name),
+        };
+      }
     }
   }
 
-  // Company name
+  // ── Company name ──
   if (!mem.companyName) {
     const companyMatch = msg.match(/(?:my company(?:\s+is)?|our company(?:\s+is)?|company name(?:\s+is)?|company:|firm:)\s+([A-Za-z0-9\s&.,'\-]{2,40}?)(?:\s*[,.]|$)/i);
     if (companyMatch) {
@@ -424,7 +592,7 @@ function extractEntities(msg, mem) {
     }
   }
 
-  // Target countries (accumulate all)
+  // ── Target countries ──
   if (!NEGATION_RE.test(lower)) {
     for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
       if (lower.includes(kw) && EXPAND_INTENT_RE.test(lower)) {
@@ -438,7 +606,7 @@ function extractEntities(msg, mem) {
     }
   }
 
-  // Current country
+  // ── Current country ──
   if (!mem.currentCountry && /\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur)\b/i.test(lower)) {
     updates.currentCountry = 'India';
   }
@@ -451,7 +619,7 @@ function extractEntities(msg, mem) {
     }
   }
 
-  // Services (accumulate all)
+  // ── Services ──
   for (const [kw, svc] of Object.entries(SERVICE_MAP)) {
     if (lower.includes(kw)) {
       const existing = mem.servicesDiscussed || [];
@@ -463,11 +631,11 @@ function extractEntities(msg, mem) {
     }
   }
 
-  return updates;
+  return { updates, validationError };
 }
 
 // ─────────────────────────────────────────────
-// TOPIC DETECTION (same as WhatsApp bot)
+// TOPIC DETECTION
 // ─────────────────────────────────────────────
 const TOPIC_REs = [
   [/\bbank|account opening/i,            'Banking'],
@@ -487,11 +655,9 @@ function inferTopic(msg) {
 }
 
 // ─────────────────────────────────────────────
-// MENU PARSER — same logic as WhatsApp bot
-// Parses Claude's reply to extract 4 follow-up options
+// MENU PARSER
 // ─────────────────────────────────────────────
 function parseMenuFromReply(reply) {
-  // Remove SUGGEST_TOPICS block before parsing numbered lists
   const cleaned = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/g, '').normalize('NFC');
 
   const emojiRE = /([1-4])[\uFE0F\u20E3]{0,2}\s*(.+?)(?=\n[1-4][\uFE0F\u20E3]{0,2}|\n*$)/g;
@@ -510,7 +676,6 @@ function parseMenuFromReply(reply) {
     return opts.slice(0, 4);
   }
 
-  // SUGGEST_TOPICS fallback — use those as menu options if numbered list not found
   const topicsMatch = reply.match(/SUGGEST_TOPICS:\[([^\]]+)\]/);
   if (topicsMatch) {
     try {
@@ -526,7 +691,7 @@ function parseMenuFromReply(reply) {
 }
 
 // ─────────────────────────────────────────────
-// CONTEXT BLOCK (same structure as WhatsApp bot)
+// CONTEXT BLOCK
 // ─────────────────────────────────────────────
 function buildContextBlock(mem, state) {
   const lines = [];
@@ -567,7 +732,7 @@ function buildContextBlock(mem, state) {
 }
 
 // ─────────────────────────────────────────────
-// PHASE HINT — guides Claude's onboarding questions
+// PHASE HINT
 // ─────────────────────────────────────────────
 function buildPhaseHint(mem, state) {
   const phase = state.phase;
@@ -586,7 +751,6 @@ function buildPhaseHint(mem, state) {
     return `\n\n[PHASE: onboarding_contact. You have name (${mem.name}) and target market but NO contact details yet. Answer any question they ask helpfully and concisely, then ALWAYS end your reply with exactly this: "Before we dive deeper, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a custom quote and any details specific to your situation." Be warm, not pushy. Do NOT include the follow-up menu block in this phase.]`;
   }
 
-  // advisory phase — full mode, but if we still have no contact details, add a soft one-time re-ask
   if (phase === 'advisory' && !mem.email && !mem.phone && !state.contactNudgeSent) {
     state.contactNudgeSent = true;
     return `\n\n[CONTACT NUDGE — one time only: You are in advisory mode but still have no contact details for ${mem.name}. Answer their question fully as normal. Then at the very end, add one line naturally: "By the way ${mem.name}, could I grab your email so our team can send you tailored follow-up on this?" Do NOT repeat this nudge in future messages.]`;
@@ -596,7 +760,7 @@ function buildPhaseHint(mem, state) {
 }
 
 // ─────────────────────────────────────────────
-// SYSTEM PROMPT (aligned with WhatsApp bot personality)
+// SYSTEM PROMPT
 // ─────────────────────────────────────────────
 const ADVISOR_SYSTEM_PROMPT = `You are a premium international business expansion advisor for Comply Globally, powered by Connect Ventures Inc. You help founders and businesses expand globally across 47+ countries — covering incorporation, banking, taxation, compliance, residency, FEMA/ODI, logistics, immigration, and cross-border strategy.
 
@@ -764,16 +928,10 @@ function advancePhase(session) {
     }
     return;
   }
-
-  // Once advisory, check if we just got a contact detail we were missing
-  if (state.phase === 'advisory') {
-    // stay in advisory
-  }
 }
 
 // ─────────────────────────────────────────────
-// DETERMINISTIC MEMORY RECALL (same as WhatsApp bot)
-// Intercept "what's my name" etc. before Claude
+// DETERMINISTIC MEMORY RECALL
 // ─────────────────────────────────────────────
 function checkMemoryRecall(msg, session) {
   const mem   = session.memory;
@@ -805,7 +963,7 @@ function checkMemoryRecall(msg, session) {
 }
 
 // ─────────────────────────────────────────────
-// LEAD PERSISTENCE (MongoDB + Google Sheets + Email)
+// LEAD PERSISTENCE
 // ─────────────────────────────────────────────
 async function findExistingLead(mem) {
   if (!leadsCol) return null;
@@ -946,13 +1104,12 @@ async function sendLeadEmail(session) {
   }
 }
 
-// Lead is "complete enough" to save when we have name + contact (email or phone)
 function isLeadSaveable(mem) {
   return !!(mem.name && (mem.email || mem.phone));
 }
 
 // ─────────────────────────────────────────────
-// ROLLING CONVERSATION SUMMARY (every 5 user messages)
+// ROLLING CONVERSATION SUMMARY
 // ─────────────────────────────────────────────
 async function maybeUpdateSummary(session) {
   const userMsgCount = session.history.filter(m => m.role === 'user').length;
@@ -991,7 +1148,6 @@ app.post('/api/chat', async (req, res) => {
     if (!message || !message.trim()) return res.json({ reply: 'Please send a message.' });
     message = message.trim();
 
-    // Reject suspiciously long messages
     if (message.length > 1500) {
       return res.json({ reply: `That message was a bit long for me — could you summarize your question in a sentence or two?`, sessionId });
     }
@@ -1019,12 +1175,29 @@ app.post('/api/chat', async (req, res) => {
       });
     }
 
-    // ── ENTITY EXTRACTION ──
+    // ── ENTITY EXTRACTION (now async, returns validationError) ──
     if (!mem.name) {
       const n = extractName(message);
       if (n) { mem.name = n; console.log(`✅ Name locked: ${n}`); }
     }
-    const entityUpdates = extractEntities(message, mem);
+
+    // ✅ VALIDATION: extractEntities now validates email/phone before storing
+    const { updates: entityUpdates, validationError } = await extractEntities(message, mem);
+
+    // If user gave an invalid email or phone, reply immediately with correction prompt
+    // WITHOUT passing the bad value to memory, WITHOUT calling Claude
+    if (validationError) {
+      session.history.push({ role: 'user',      content: truncateMsg(message)           });
+      session.history.push({ role: 'assistant', content: validationError.message         });
+      await saveSession(session);
+      return res.json({
+        reply:     validationError.message,
+        sessionId,
+        menu:      null,
+        phase:     state.phase,
+      });
+    }
+
     if (Object.keys(entityUpdates).length > 0) {
       Object.assign(mem, entityUpdates);
       console.log(`📝 Entities:`, entityUpdates);
@@ -1039,7 +1212,7 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // Advance phase based on what we now know
+    // Advance phase
     advancePhase(session);
 
     // ── DETERMINISTIC MEMORY RECALL ──
@@ -1051,8 +1224,7 @@ app.post('/api/chat', async (req, res) => {
       return res.json({ reply: memoryReply, sessionId, menu: null, phase: state.phase });
     }
 
-    // ── MENU SELECTION (numbered reply) ──
-    // Anchored number match — same logic as WhatsApp bot
+    // ── MENU SELECTION ──
     const numMatch = message.toLowerCase().trim().match(/^\s*(?:option\s*|question\s*|no\.?\s*|#\s*)?([1-4])\s*$/);
     if (numMatch && state.lastMenu) {
       const num      = parseInt(numMatch[1]);
@@ -1084,7 +1256,6 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // No active menu + numbered message
     if (numMatch && !state.lastMenu) {
       const fallback = `I don't have an active menu right now — feel free to ask me anything directly!`;
       session.history.push({ role: 'user',      content: message   });
@@ -1109,32 +1280,26 @@ app.post('/api/chat', async (req, res) => {
       return res.json({ reply: `I hit a brief connectivity issue. Please try your question again!`, sessionId, menu: null, phase: state.phase });
     }
 
-    // Store in history (strip SUGGEST_TOPICS from assistant side)
     const replyForHistory = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/g, '').trim();
     session.history.push({ role: 'user',      content: truncateMsg(message)        });
     session.history.push({ role: 'assistant', content: truncateMsg(replyForHistory) });
 
-    // Parse menu from reply
     const newMenu = parseMenuFromReply(reply);
     if (newMenu) {
       state.lastMenu = { options: newMenu, context: topic || message.substring(0, 60), createdAt: Date.now() };
       console.log(`📋 Menu stored: [${newMenu.join(' | ')}]`);
     } else if (state.phase === 'advisory') {
-      // Clear stale menu if no new one provided in advisory mode
       state.lastMenu = null;
     }
 
-    // Rolling summary
     await maybeUpdateSummary(session);
 
-    // Save lead if saveable and not yet saved (or update if new info)
     if (isLeadSaveable(mem)) {
       const wasAlreadySaved = state.leadSaved;
       state.leadSaved = true;
       await saveLead(session);
       await appendToSheet(session);
       if (!wasAlreadySaved) {
-        // First time saving — send email notification
         await sendLeadEmail(session);
       }
     }
@@ -1224,7 +1389,7 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5000;
 connectMongo().then(() => {
   app.listen(PORT, () => {
-    console.log(`\n🚀 Comply Website Bot v2.0 — WhatsApp-Parity Edition`);
+    console.log(`\n🚀 Comply Website Bot v2.1 — Contact Validation Edition`);
     console.log(`📡 Port: ${PORT}`);
     console.log(`💬 POST /api/chat`);
     console.log(`📊 GET  /leads`);
