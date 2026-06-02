@@ -3,14 +3,18 @@
 /**
  * ============================================================
  *  COMPLY GLOBALLY — Website AI Chatbot Backend
- *  v2.1 — Contact Validation Edition
+ *  v2.2 — Onboarding Flow Fix Edition
  *
- *  Changes from v2.0:
- *  - validateEmail(): format + typo TLD + fake domain + DNS MX check
- *  - validatePhone(): India-aware (10 digits, 6-9 prefix) + E.164 international
- *  - extractEntities() now calls both validators before accepting contact info
- *  - Invalid contact triggers a friendly correction prompt instead of saving
- *  - All other logic (onboarding, KB, menus, leads, summary) unchanged
+ *  Fixes from v2.1:
+ *  - extractEntities() is now called in the main chat handler
+ *  - onboarding_contact phase no longer loops on non-email input;
+ *    Claude asks naturally and only intercepts when an email/phone
+ *    is actually submitted
+ *  - Phone collection is now live (was dead code in v2.1)
+ *  - advancePhase() called correctly after every contact update
+ *  - Contact nudge in advisory phase now actually fires
+ *  - Email/phone validation errors returned as clean chat replies
+ *    without breaking the conversation flow
  * ============================================================
  */
 
@@ -354,26 +358,16 @@ function extractName(msg) {
 }
 
 // ─────────────────────────────────────────────
-// ✅ NEW: EMAIL & PHONE VALIDATION
+// EMAIL & PHONE VALIDATION
 // ─────────────────────────────────────────────
 
-/**
- * validateEmail(email)
- * Returns { valid: boolean, reason: string|null }
- * Checks: format → typo TLDs → fake/disposable domains → DNS MX lookup
- */
-/**
- * validateEmail(email)
- * Returns { valid: boolean, reason: string|null, cleaned?: string }
- * Checks: format → typo TLDs → fake/disposable domains → DNS MX lookup
- */
 async function validateEmail(email, options = { skipDNS: false }) {
   if (!email || typeof email !== 'string') {
     return { valid: false, reason: 'empty' };
   }
 
   let trimmed = email.trim().toLowerCase();
-  
+
   // Try to fix common typos before validation
   const preCleaned = preCleanEmail(trimmed);
   if (preCleaned.cleaned && preCleaned.hadTypo) {
@@ -414,105 +408,70 @@ async function validateEmail(email, options = { skipDNS: false }) {
   if (!options.skipDNS) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      const timeoutId = setTimeout(() => controller.abort(), 3000);
       const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`;
       const dnsRes = await fetch(dnsUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
-      
+
       if (dnsRes.ok) {
         const dnsData = await dnsRes.json();
-        // Status 3 = NXDOMAIN (domain doesn't exist at all)
         if (dnsData.Status === 3) {
           return { valid: false, reason: 'domain_not_found' };
         }
         if (dnsData.Status !== 0) {
           return { valid: false, reason: 'domain_not_found' };
         }
-        // Status 0 with no Answer AND no Authority = likely non-existent domain
         if (!dnsData.Answer && !dnsData.Authority) {
           return { valid: false, reason: 'domain_not_found' };
         }
       }
     } catch (dnsErr) {
       console.warn('⚠️ DNS MX check failed (non-blocking):', dnsErr.message);
-      // Don't fail validation due to DNS timeout/error
     }
   }
 
   return { valid: true, reason: null, cleaned: trimmed };
 }
 
-/**
- * preCleanEmail - Detect and fix common email typos before validation
- * Returns { cleaned: string|null, hadTypo: boolean }
- */
 function preCleanEmail(rawText) {
   if (!rawText || typeof rawText !== 'string') return { cleaned: null, hadTypo: false };
-  
   const text = rawText.trim().toLowerCase();
-  
-  // Pattern 1: "username gmail.com" or "username gmail" (missing @)
+
   const missingAtGmail = /^([a-z0-9._%+\-]+)\s+gmail(?:\.com)?$/i;
   let match = text.match(missingAtGmail);
-  if (match) {
-    return { cleaned: `${match[1]}@gmail.com`, hadTypo: true };
-  }
-  
-  // Pattern 2: "username yahoo.com" or "username yahoo"
+  if (match) return { cleaned: `${match[1]}@gmail.com`, hadTypo: true };
+
   const missingAtYahoo = /^([a-z0-9._%+\-]+)\s+yahoo(?:\.com)?$/i;
   match = text.match(missingAtYahoo);
-  if (match) {
-    return { cleaned: `${match[1]}@yahoo.com`, hadTypo: true };
-  }
-  
-  // Pattern 3: "username hotmail.com" or "username hotmail"
+  if (match) return { cleaned: `${match[1]}@yahoo.com`, hadTypo: true };
+
   const missingAtHotmail = /^([a-z0-9._%+\-]+)\s+hotmail(?:\.com)?$/i;
   match = text.match(missingAtHotmail);
-  if (match) {
-    return { cleaned: `${match[1]}@hotmail.com`, hadTypo: true };
-  }
-  
-  // Pattern 4: "username at gmail dot com"
+  if (match) return { cleaned: `${match[1]}@hotmail.com`, hadTypo: true };
+
   const atDotPattern = /^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9]+)\s+dot\s+(com|net|org)$/i;
   match = text.match(atDotPattern);
-  if (match) {
-    return { cleaned: `${match[1]}@${match[2]}.${match[3]}`, hadTypo: true };
-  }
-  
-  // Pattern 5: "username@gmail" (missing TLD)
+  if (match) return { cleaned: `${match[1]}@${match[2]}.${match[3]}`, hadTypo: true };
+
   const missingTLD = /^([a-z0-9._%+\-]+@[a-z0-9.\-]+)$/i;
   match = text.match(missingTLD);
   if (match && !text.includes('.com') && !text.includes('.net') && !text.includes('.org')) {
     return { cleaned: `${match[1]}.com`, hadTypo: true };
   }
-  
+
   return { cleaned: null, hadTypo: false };
 }
 
-/**
- * validatePhone(rawPhone, currentCountry)
- * Returns { valid: boolean, reason: string|null, cleaned: string|null }
- *
- * India context (+91 prefix, or currentCountry=India):
- *   - Exactly 10 digits after stripping country code
- *   - Must start with 6, 7, 8, or 9
- *
- * International:
- *   - E.164: 7–15 digits after stripping +
- *   - Rejects all-same-digit placeholders (9999999999 etc.)
- */
 function validatePhone(rawPhone, currentCountry) {
   if (!rawPhone) return { valid: false, reason: 'empty', cleaned: null };
 
   const stripped = rawPhone.replace(/[\s\-().]/g, '');
-
   if (!/^\+?\d+$/.test(stripped)) {
     return { valid: false, reason: 'format', cleaned: null };
   }
 
   const digitsOnly = stripped.replace(/^\+/, '');
 
-  // India-specific validation
   const isIndiaContext =
     stripped.startsWith('+91') ||
     stripped.startsWith('091') ||
@@ -532,7 +491,6 @@ function validatePhone(rawPhone, currentCountry) {
     return { valid: true, reason: null, cleaned: '+91' + local };
   }
 
-  // International (non-India)
   if (digitsOnly.length < 7)  return { valid: false, reason: 'too_short',   cleaned: null };
   if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',    cleaned: null };
   if (/^(.)\1+$/.test(digitsOnly)) return { valid: false, reason: 'placeholder', cleaned: null };
@@ -541,7 +499,7 @@ function validatePhone(rawPhone, currentCountry) {
   return { valid: true, reason: null, cleaned };
 }
 
-// Human-friendly feedback messages for invalid contact info
+// Human-friendly feedback messages
 const EMAIL_FEEDBACK = {
   format:           (name) => `That doesn't look like a valid email address${name ? ', ' + name : ''}. Email addresses need an "@" symbol and a domain (like name@company.com). Could you share your correct email?`,
   typo_tld:         (name) => `There might be a small typo in that email${name ? ', ' + name : ''} — the ending doesn't look right. Could you double-check and re-enter it?`,
@@ -571,10 +529,55 @@ function getPhoneFeedback(reason, name) {
 }
 
 // ─────────────────────────────────────────────
+// CONTACT DETECTION HELPERS
+// These determine whether a message *looks like* it contains
+// contact info before we run validation. This way we don't
+// fire validation errors on normal conversational messages.
+// ─────────────────────────────────────────────
+
+/**
+ * Returns the email string if the message appears to contain one,
+ * otherwise null. Handles "username at domain dot com" variants.
+ */
+function detectEmailAttempt(msg) {
+  // Standard email pattern
+  const standardMatch = msg.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/);
+  if (standardMatch) return standardMatch[0];
+
+  // "word at domain dot com/net/org"
+  const atDotMatch = msg.match(/\b([A-Za-z0-9._%+\-]+)\s+at\s+([A-Za-z0-9]+)\s+dot\s+(com|net|org|co\.in|in)\b/i);
+  if (atDotMatch) return `${atDotMatch[1]}@${atDotMatch[2]}.${atDotMatch[3]}`;
+
+  // "word gmail.com" or "word gmail" (missing @)
+  const missingAt = msg.match(/^([A-Za-z0-9._%+\-]+)\s+(gmail|yahoo|hotmail|outlook)(?:\.com)?$/i);
+  if (missingAt) return `${missingAt[1]}@${missingAt[2]}.com`;
+
+  return null;
+}
+
+/**
+ * Returns the raw phone string if the message looks like a phone number attempt.
+ * Avoids triggering on years, prices, or short numeric inputs.
+ */
+function detectPhoneAttempt(msg) {
+  const cleaned = msg.trim();
+
+  // Must look like a phone number: optional + then digits, spaces, dashes, parens
+  // Minimum 7 digits, maximum 15 digits
+  const phoneMatch = cleaned.match(/^[\+\d][\d\s\-().]{6,18}\d$/);
+  if (!phoneMatch) return null;
+
+  const digitsOnly = cleaned.replace(/\D/g, '');
+  if (digitsOnly.length < 7 || digitsOnly.length > 15) return null;
+
+  // Don't treat years (4-digit numbers starting with 1-2) as phones
+  if (digitsOnly.length === 4 && /^[12]/.test(digitsOnly)) return null;
+
+  return cleaned;
+}
+
+// ─────────────────────────────────────────────
 // ENTITY EXTRACTION
-// ✅ CHANGE: email and phone are now validated before being stored.
-//    Returns validationError = { type: 'email'|'phone', message: string }
-//    when invalid contact is detected, so the chat endpoint can reply immediately.
 // ─────────────────────────────────────────────
 const SERVICE_MAP = {
   'incorporat': 'Incorporation', 'register': 'Incorporation', 'set up': 'Incorporation',
@@ -586,14 +589,15 @@ const SERVICE_MAP = {
   'fundrais': 'Fundraising', 'vc ': 'Fundraising', 'investor': 'Fundraising',
 };
 
+const EXPAND_INTENT_RE = /expand|incorporat|setup|set up|open|register|move|launch|start|going to|looking at|consider|want to|thinking about/i;
+const NEGATION_RE      = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
 
-const EMAIL_RE           = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/;
-const EMAIL_OWNERSHIP_RE = /(?:my email(?:\s+is|:)?|email me at|reach me at|contact me at|i(?:'m| am) at|you can (?:email|reach) me at|mail is|my mail is|email is|mail id is|my mail id is|my mail|my email)\s*:?\s*([^\s,.;!?]+)/i;
-const PHONE_RE           = /(?:\+?\d[\d\s\-]{8,14}\d)/;
-const EXPAND_INTENT_RE   = /expand|incorporat|setup|set up|open|register|move|launch|start|going to|looking at|consider|want to|thinking about/i;
-const NEGATION_RE        = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
-
-// ✅ Now async because validateEmail does a DNS check
+/**
+ * extractEntities — scans message for contact info, countries, services.
+ * ONLY validates email/phone if they are DETECTED (message looks like contact info).
+ * Returns { updates, validationError }.
+ * validationError = { type: 'email'|'phone', message: string } when invalid contact detected.
+ */
 async function extractEntities(msg, mem) {
   const lower   = msg.toLowerCase();
   const updates = {};
@@ -601,71 +605,11 @@ async function extractEntities(msg, mem) {
 
   // ── Email ──
   if (!mem.email) {
-    let rawEmail = null;
-    
-    // Check if this looks like a real email (must have @ and domain)
-    const hasAtSymbol = msg.includes('@');
-    const hasValidEmailFormat = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/.test(msg);
-    
-    // Check for email ownership phrases
-    const emailOwnershipPhrases = /(?:my email(?:\s+is|:)?|email me at|reach me at|contact me at|i(?:'m| am) at|you can (?:email|reach) me at|mail is|my mail is|email is|mail id is|my mail id is|my mail|my email)/i;
-    const hasEmailPhrase = emailOwnershipPhrases.test(msg);
-    
-    // Check if this is clearly NOT an email attempt (greetings, casual conversation)
-    const isClearlyNotEmail = /^(hey|hello|hi|ok|okay|thanks|thank you|sure|yes|no|maybe|wait|hold on|just a moment|brb|sorry|my bad|oops|hmm|um|uh)$/i.test(msg.trim());
-    const isQuestion = msg.includes('?');
-    const isGeneralStatement = /^(i think|i feel|i want|i need|can you|could you|please|help|what about|how about)/i.test(msg);
-    
-    // If it's clearly not an email attempt, don't even try to validate as email
-    if (isClearlyNotEmail || isQuestion || isGeneralStatement) {
-      console.log(`📝 Message doesn't look like email attempt: "${msg}" - skipping email validation`);
-      // Don't return validation error - just skip email extraction
-    } else {
-      // Extract what comes after the email phrase
-      let extractedText = null;
-      if (hasEmailPhrase) {
-        const phraseMatch = msg.match(emailOwnershipPhrases);
-        if (phraseMatch) {
-          const afterPhrase = msg.substring(phraseMatch.index + phraseMatch[0].length).trim();
-          // Get the first word/short phrase after the email indicator
-          extractedText = afterPhrase.match(/^[^\s,.;!?]+/)?.[0] || null;
-        }
-      }
-      
-      // ONLY consider it an email if it has @ symbol AND valid format
-      if (hasAtSymbol && hasValidEmailFormat) {
-        // Extract the actual email
-        const emailMatch = msg.match(EMAIL_RE);
-        if (emailMatch) rawEmail = emailMatch[0];
-      } 
-      // If they used an email phrase but didn't provide @, reject it
-      else if (hasEmailPhrase && extractedText && !extractedText.includes('@') && extractedText.length > 2) {
-        console.log(`❌ Invalid email detected: "${extractedText}" (missing @ symbol)`);
-        validationError = {
-          type: 'email',
-          message: `That doesn't look like a valid email address${mem.name ? ', ' + mem.name : ''}. An email address needs to have an "@" symbol and a domain (like name@example.com). Could you please share your correct email address?`,
-        };
-        return { updates, validationError };
-      }
-      // Check for single words that might be email attempts (but not greetings)
-      else if (msg.trim().split(/\s+/).length === 1 && !msg.includes('@') && msg.length > 2 && msg.length < 30 && !isClearlyNotEmail) {
-        const word = msg.trim();
-        // Only reject as email if it looks like someone trying to type an email username
-        if (/^[a-z0-9._%+\-]+$/i.test(word) && word.length >= 4) {
-          console.log(`❌ Word without @ detected: "${word}" - asking for full email`);
-          validationError = {
-            type: 'email',
-            message: `I need a complete email address${mem.name ? ', ' + mem.name : ''} with an "@" symbol and domain (like ${word}@example.com). Could you share your full email address?`,
-          };
-          return { updates, validationError };
-        }
-      }
-    }
-
+    const rawEmail = detectEmailAttempt(msg);
     if (rawEmail) {
       const emailCheck = await validateEmail(rawEmail);
       if (emailCheck.valid) {
-        updates.email = rawEmail.trim().toLowerCase();
+        updates.email = emailCheck.cleaned || rawEmail.trim().toLowerCase();
         console.log(`✅ Email validated: ${updates.email}`);
       } else {
         console.log(`❌ Email rejected (${emailCheck.reason}): ${rawEmail}`);
@@ -673,29 +617,26 @@ async function extractEntities(msg, mem) {
           type: 'email',
           message: getEmailFeedback(emailCheck.reason, mem.name),
         };
+        return { updates, validationError };
       }
     }
   }
 
-  // ── Phone ── (similar improvements)
+  // ── Phone ──
   if (!mem.phone && !validationError) {
-    // Check if this is clearly not a phone number attempt
-    const isClearlyNotPhone = /^(hey|hello|hi|ok|okay|thanks|thank you|sure|yes|no|maybe)$/i.test(msg.trim());
-    
-    if (!isClearlyNotPhone) {
-      const phoneMatch = msg.match(PHONE_RE);
-      if (phoneMatch) {
-        const phoneCheck = validatePhone(phoneMatch[0], mem.currentCountry);
-        if (phoneCheck.valid) {
-          updates.phone = phoneCheck.cleaned;
-          console.log(`✅ Phone validated: ${updates.phone}`);
-        } else {
-          console.log(`❌ Phone rejected (${phoneCheck.reason}): ${phoneMatch[0]}`);
-          validationError = {
-            type: 'phone',
-            message: getPhoneFeedback(phoneCheck.reason, mem.name),
-          };
-        }
+    const rawPhone = detectPhoneAttempt(msg);
+    if (rawPhone) {
+      const phoneCheck = validatePhone(rawPhone, mem.currentCountry);
+      if (phoneCheck.valid) {
+        updates.phone = phoneCheck.cleaned;
+        console.log(`✅ Phone validated: ${updates.phone}`);
+      } else {
+        console.log(`❌ Phone rejected (${phoneCheck.reason}): ${rawPhone}`);
+        validationError = {
+          type: 'phone',
+          message: getPhoneFeedback(phoneCheck.reason, mem.name),
+        };
+        return { updates, validationError };
       }
     }
   }
@@ -726,15 +667,16 @@ async function extractEntities(msg, mem) {
   }
 
   // ── Current country ──
-  if (!mem.currentCountry && !validationError && /\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur)\b/i.test(lower)) {
-    updates.currentCountry = 'India';
-  }
   if (!mem.currentCountry && !validationError) {
-    const basedMatch = lower.match(/(?:based in|currently based in|i(?:'m| am) in|living in|from)\s+([a-z\s]+?)(?:\s|,|$)/);
-    if (basedMatch) {
-      const place = basedMatch[1].trim();
-      const mapped = COUNTRY_MAP[place];
-      if (mapped) updates.currentCountry = mapped;
+    if (/\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur)\b/i.test(lower)) {
+      updates.currentCountry = 'India';
+    } else {
+      const basedMatch = lower.match(/(?:based in|currently based in|i(?:'m| am) in|living in|from)\s+([a-z\s]+?)(?:\s|,|$)/);
+      if (basedMatch) {
+        const place  = basedMatch[1].trim();
+        const mapped = COUNTRY_MAP[place];
+        if (mapped) updates.currentCountry = mapped;
+      }
     }
   }
 
@@ -754,6 +696,8 @@ async function extractEntities(msg, mem) {
 
   return { updates, validationError };
 }
+
+// ─────────────────────────────────────────────
 // TOPIC DETECTION
 // ─────────────────────────────────────────────
 const TOPIC_REs = [
@@ -856,18 +800,10 @@ function buildContextBlock(mem, state) {
 function buildPhaseHint(mem, state) {
   const phase = state.phase;
 
-  if (phase === 'new' || phase === 'onboarding_name') {
-    if (!mem.name) {
-      return `\n\n[PHASE: onboarding_name. You do NOT yet know the user's name. Answer any question they ask briefly and helpfully, then ALWAYS end with a warm, natural version of "By the way, who am I speaking with?" Do NOT include the follow-up menu block in this phase.]`;
-    }
-  }
-
-  if (phase === 'onboarding_country') {
-    return `\n\n[PHASE: onboarding_country. You have name (${mem.name}) but not their target market. Answer helpfully, then ask: "Which market are you looking to expand into, ${mem.name}?" Do NOT include the follow-up menu block yet.]`;
-  }
-
+  // During onboarding_contact, Claude should answer the question AND ask for contact info
+  // It should NOT be blocked by the handler — the handler only intercepts actual contact attempts
   if (phase === 'onboarding_contact') {
-    return `\n\n[PHASE: onboarding_contact. You have name (${mem.name}) and target market but NO contact details yet. Answer any question they ask helpfully and concisely, then ALWAYS end your reply with exactly this: "Before we dive deeper, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a custom quote and any details specific to your situation." Be warm, not pushy. Do NOT include the follow-up menu block in this phase.]`;
+    return `\n\n[PHASE: onboarding_contact. You have name (${mem.name}) and target market (${mem.targetCountry || mem.targetCountries.join(', ')}), but NO contact details yet. Answer any question they ask helpfully and concisely, then ALWAYS end your reply with: "Before we dive deeper, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a custom quote and tailored details for your situation." Be warm, not pushy. Do NOT include the numbered follow-up menu in this phase.]`;
   }
 
   if (phase === 'advisory' && !mem.email && !mem.phone && !state.contactNudgeSent) {
@@ -1026,11 +962,7 @@ function advancePhase(session) {
   const { memory: mem, state } = session;
 
   if (state.phase === 'new' || state.phase === 'onboarding_name') {
-    if (mem.name) {
-      state.phase = 'onboarding_country';
-    } else {
-      state.phase = 'onboarding_name';
-    }
+    state.phase = mem.name ? 'onboarding_country' : 'onboarding_name';
     return;
   }
 
@@ -1045,6 +977,11 @@ function advancePhase(session) {
     if (mem.email || mem.phone) {
       state.phase = 'advisory';
     }
+    return;
+  }
+
+  // In advisory phase, if contact info arrives later, stay in advisory
+  if (state.phase === 'advisory') {
     return;
   }
 }
@@ -1280,45 +1217,70 @@ app.post('/api/chat', async (req, res) => {
 
     console.log(`\n📩 [${sessionId.slice(-8)}] Phase: ${state.phase}, Message: "${message}"`);
 
-    // ── FIRST MESSAGE: send welcome and ask name ──
+    // ── FIRST MESSAGE: deterministic welcome ──
     if (session.history.length === 0 && (state.phase === 'new' || state.phase === 'onboarding_name')) {
       state.phase = 'onboarding_name';
       const welcome = `Hi there! 👋 Welcome to Comply Globally.\n\nI'm your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?`;
       session.history.push({ role: 'assistant', content: welcome });
       await saveSession(session);
+      return res.json({ reply: welcome, sessionId, menu: null, phase: state.phase });
+    }
+
+    // ══════════════════════════════════════════
+    // STEP 1: Run entity extraction on EVERY message.
+    // This catches emails and phones whenever they appear,
+    // regardless of phase. If contact info is invalid,
+    // return the validation error immediately.
+    // ══════════════════════════════════════════
+    const { updates, validationError } = await extractEntities(message, mem);
+
+    if (validationError) {
+      // Don't save invalid data — just reply with the friendly error
+      session.history.push({ role: 'user',      content: truncateMsg(message) });
+      session.history.push({ role: 'assistant', content: truncateMsg(validationError.message) });
+      await saveSession(session);
       return res.json({
-        reply: welcome,
+        reply: validationError.message,
         sessionId,
         menu: null,
         phase: state.phase,
+        validationFailed: true,
       });
     }
 
-    // ── NAME EXTRACTION (ALWAYS do this first, regardless of phase) ──
-    if (!mem.name) {
+    // Apply valid updates to memory
+    let contactJustReceived = false;
+    if (Object.keys(updates).length > 0) {
+      const hadContactBefore = !!(mem.email || mem.phone);
+      Object.assign(mem, updates);
+      const hasContactNow = !!(mem.email || mem.phone);
+      contactJustReceived = !hadContactBefore && hasContactNow;
+      console.log(`📝 Memory updated:`, updates);
+    }
+
+    // ── STEP 2: Name extraction (only during onboarding_name) ──
+    if (!mem.name && (state.phase === 'new' || state.phase === 'onboarding_name')) {
       const n = extractName(message);
-      if (n) { 
-        mem.name = n; 
+      if (n) {
+        mem.name = n;
         console.log(`✅ Name locked: ${n}`);
-        // Advance phase after getting name
         advancePhase(session);
         await saveSession(session);
-        
-        // After getting name, ask for country
+
         const nameReply = `Nice to meet you, ${n}! 🌟\n\nWhich market are you looking to expand into? (e.g., UAE, Singapore, UK, USA, India)`;
-        session.history.push({ role: 'assistant', content: nameReply });
-        return res.json({
-          reply: nameReply,
-          sessionId,
-          menu: null,
-          phase: state.phase,
-        });
+        session.history.push({ role: 'user',      content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
+        return res.json({ reply: nameReply, sessionId, menu: null, phase: state.phase });
       }
     }
 
-    // ── COUNTRY EXTRACTION (if we have name but no country) ──
-    if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
-      // Check if message contains a country
+    // ── STEP 3: Country extraction (only during onboarding_country) ──
+    if (
+      mem.name &&
+      !mem.targetCountry &&
+      mem.targetCountries.length === 0 &&
+      state.phase === 'onboarding_country'
+    ) {
       let foundCountry = null;
       for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
         if (message.toLowerCase().includes(kw)) {
@@ -1326,88 +1288,66 @@ app.post('/api/chat', async (req, res) => {
           break;
         }
       }
-      
+
       if (foundCountry) {
-        mem.targetCountry = foundCountry;
+        mem.targetCountry   = foundCountry;
         mem.targetCountries = [foundCountry];
         console.log(`✅ Country locked: ${foundCountry}`);
         advancePhase(session);
         await saveSession(session);
-        
-        // After getting country, ask for contact info
-        const countryReply = `Great choice, ${mem.name}! ${foundCountry} is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email address? Our team will use it to send you a custom quote and specific insights for ${foundCountry}.`;
-        session.history.push({ role: 'assistant', content: countryReply });
-        return res.json({
-          reply: countryReply,
-          sessionId,
-          menu: null,
-          phase: state.phase,
-        });
+
+        const countryReply = `Great choice, ${mem.name}! ${foundCountry} is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email or WhatsApp number? Our team will use it to send you a custom quote and specific insights for ${foundCountry}.`;
+        session.history.push({ role: 'user',      content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(countryReply) });
+        return res.json({ reply: countryReply, sessionId, menu: null, phase: state.phase });
       } else {
-        // No country detected, ask again
+        // No country found — ask again (but still save history)
         const askAgain = `Which market are you looking to expand into, ${mem.name}? For example: UAE, Singapore, UK, USA, or India.`;
-        session.history.push({ role: 'assistant', content: askAgain });
+        session.history.push({ role: 'user',      content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(askAgain) });
         await saveSession(session);
-        return res.json({
-          reply: askAgain,
-          sessionId,
-          menu: null,
-          phase: state.phase,
-        });
+        return res.json({ reply: askAgain, sessionId, menu: null, phase: state.phase });
       }
     }
 
-    // ── EMAIL VALIDATION (ONLY in onboarding_contact phase or when expecting email) ──
-    if (!mem.email && (state.phase === 'onboarding_contact' || state.phase === 'advisory')) {
-      // Check if this looks like an email
-      const hasAtSymbol = message.includes('@');
-      const hasValidFormat = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/.test(message);
-      
-      if (hasAtSymbol && hasValidFormat) {
-        // Validate the email
-        const emailCheck = await validateEmail(message);
-        if (emailCheck.valid) {
-          mem.email = message.trim().toLowerCase();
-          console.log(`✅ Email validated: ${mem.email}`);
-          advancePhase(session);
-          await saveSession(session);
-          
-          const emailReply = `Perfect, ${mem.name}! I've got your email as ${mem.email}. 📧\n\nOur team will reach out to you soon with tailored information about expanding to ${mem.targetCountry}.\n\nNow, to help you better - what specific aspect of expansion interests you most? (e.g., incorporation, banking, taxation, compliance)`;
-          session.history.push({ role: 'assistant', content: emailReply });
-          return res.json({
-            reply: emailReply,
-            sessionId,
-            menu: null,
-            phase: state.phase,
-          });
-        } else {
-          // Invalid email format
-          const errorReply = getEmailFeedback(emailCheck.reason, mem.name);
-          session.history.push({ role: 'assistant', content: errorReply });
-          await saveSession(session);
-          return res.json({
-            reply: errorReply,
-            sessionId,
-            menu: null,
-            phase: state.phase,
-            validationFailed: true,
-          });
+    // ── STEP 4: If contact was just received in onboarding_contact, confirm and advance ──
+    if (contactJustReceived && state.phase === 'onboarding_contact') {
+      advancePhase(session);
+
+      const contactType = mem.email ? `email (${mem.email})` : `number (${mem.phone})`;
+      const confirmReply = `Perfect, ${mem.name}! I've got your ${contactType}. 📧\n\nOur team will be in touch with tailored information about expanding to ${mem.targetCountry}. Now — what aspect of the expansion would you like to explore first?\n\nWant to explore further?\n1️⃣ What does the incorporation process look like in ${mem.targetCountry}?\n2️⃣ What are the banking options available?\n3️⃣ What are the tax implications for my business?\n4️⃣ What compliance requirements should I know about?`;
+
+      session.history.push({ role: 'user',      content: truncateMsg(message) });
+      session.history.push({ role: 'assistant', content: truncateMsg(confirmReply) });
+
+      const menu = parseMenuFromReply(confirmReply);
+      if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
+
+      // Save lead now that we have contact info
+      if (isLeadSaveable(mem)) {
+        state.leadSaved = true;
+        await saveLead(session);
+        await appendToSheet(session);
+        await sendLeadEmail(session);
+      }
+
+      await saveSession(session);
+      return res.json({ reply: confirmReply, sessionId, menu: menu || null, phase: state.phase });
+    }
+
+    // ── STEP 5: If contact arrived during advisory phase, silently save lead ──
+    if (contactJustReceived && state.phase === 'advisory') {
+      if (isLeadSaveable(mem)) {
+        await saveLead(session);
+        await appendToSheet(session);
+        if (!state.leadSaved) {
+          await sendLeadEmail(session);
+          state.leadSaved = true;
         }
-      } else if (message.trim().length > 0 && !hasAtSymbol) {
-        // User typed something that's not an email - ask for email properly
-        const askForEmail = `I need a valid email address to send you information about ${mem.targetCountry}, ${mem.name}. Could you please share your email in the format name@example.com?`;
-        session.history.push({ role: 'assistant', content: askForEmail });
-        await saveSession(session);
-        return res.json({
-          reply: askForEmail,
-          sessionId,
-          menu: null,
-          phase: state.phase,
-        });
       }
     }
 
-    // ── TOPIC TRACKING (for advisory phase) ──
+    // ── STEP 6: Topic tracking ──
     const topic = inferTopic(message);
     if (topic && !state.topicsDiscussed.includes(topic)) {
       state.topicsDiscussed.push(topic);
@@ -1416,16 +1356,16 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // ── DETERMINISTIC MEMORY RECALL ──
+    // ── STEP 7: Deterministic memory recall ──
     const memoryReply = checkMemoryRecall(message, session);
     if (memoryReply) {
-      session.history.push({ role: 'user', content: truncateMsg(message) });
+      session.history.push({ role: 'user',      content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(memoryReply) });
       await saveSession(session);
       return res.json({ reply: memoryReply, sessionId, menu: null, phase: state.phase });
     }
 
-    // ── STANDARD CLAUDE RESPONSE (for advisory phase) ──
+    // ── STEP 8: Claude response ──
     const kbSection = retrieveKBChunks(message);
     const phaseHint = buildPhaseHint(mem, state);
 
@@ -1442,7 +1382,7 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const replyForHistory = reply.replace(/SUGGEST_TOPICS:\[[^\]]+\]/g, '').trim();
-    session.history.push({ role: 'user', content: truncateMsg(message) });
+    session.history.push({ role: 'user',      content: truncateMsg(message) });
     session.history.push({ role: 'assistant', content: truncateMsg(replyForHistory) });
 
     const newMenu = parseMenuFromReply(reply);
@@ -1455,14 +1395,16 @@ app.post('/api/chat', async (req, res) => {
 
     await maybeUpdateSummary(session);
 
-    if (isLeadSaveable(mem)) {
-      const wasAlreadySaved = state.leadSaved;
+    // Save lead whenever we have enough data (may have been updated earlier too)
+    if (isLeadSaveable(mem) && !state.leadSaved) {
       state.leadSaved = true;
       await saveLead(session);
       await appendToSheet(session);
-      if (!wasAlreadySaved) {
-        await sendLeadEmail(session);
-      }
+      await sendLeadEmail(session);
+    } else if (isLeadSaveable(mem) && state.leadSaved) {
+      // Keep lead updated with latest topics/summary
+      await saveLead(session);
+      await appendToSheet(session);
     }
 
     await saveSession(session);
@@ -1474,9 +1416,9 @@ app.post('/api/chat', async (req, res) => {
       menu: newMenu || null,
       phase: state.phase,
       leadData: {
-        name: mem.name,
-        email: mem.email,
-        phone: mem.phone,
+        name:          mem.name,
+        email:         mem.email,
+        phone:         mem.phone,
         targetCountry: mem.targetCountry,
         serviceNeeded: mem.serviceNeeded,
       },
@@ -1515,8 +1457,8 @@ app.get('/leads', async (req, res) => {
 app.get('/debug/:sessionId', async (req, res) => {
   const session = await getSession(req.params.sessionId);
   res.json({
-    memory: session.memory,
-    state:  session.state,
+    memory:        session.memory,
+    state:         session.state,
     historyLength: session.history.length,
     lastMessages:  session.history.slice(-4),
   });
@@ -1550,7 +1492,7 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5000;
 connectMongo().then(() => {
   app.listen(PORT, () => {
-    console.log(`\n🚀 Comply Website Bot v2.1 — Contact Validation Edition`);
+    console.log(`\n🚀 Comply Website Bot v2.2 — Onboarding Flow Fix Edition`);
     console.log(`📡 Port: ${PORT}`);
     console.log(`💬 POST /api/chat`);
     console.log(`📊 GET  /leads`);
