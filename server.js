@@ -800,11 +800,6 @@ function buildContextBlock(mem, state) {
 function buildPhaseHint(mem, state) {
   const phase = state.phase;
 
-  // During onboarding_contact, Claude should answer the question AND ask for contact info
-  // It should NOT be blocked by the handler — the handler only intercepts actual contact attempts
-  if (phase === 'onboarding_contact') {
-    return `\n\n[PHASE: onboarding_contact. You have name (${mem.name}) and target market (${mem.targetCountry || mem.targetCountries.join(', ')}), but NO contact details yet. Answer any question they ask helpfully and concisely, then ALWAYS end your reply with: "Before we dive deeper, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a custom quote and tailored details for your situation." Be warm, not pushy. Do NOT include the numbered follow-up menu in this phase.]`;
-  }
 
   if (phase === 'advisory' && !mem.email && !mem.phone && !state.contactNudgeSent) {
     state.contactNudgeSent = true;
@@ -1310,7 +1305,40 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    // ── STEP 4: If contact was just received in onboarding_contact, confirm and advance ──
+    // ── STEP 4: Hard gate — onboarding_contact phase ──
+    // If we're waiting for contact info and the user did NOT just provide it,
+    // we answer their question via Claude BUT always append the contact request.
+    // We do NOT let the conversation fall through to a Claude call without the gate.
+    if (state.phase === 'onboarding_contact' && !contactJustReceived) {
+      // They asked a question or said something — answer it via Claude, but
+      // force the contact ask at the end. We do this by injecting a strict
+      // suffix instruction and running a constrained Claude call.
+      const kbSection = retrieveKBChunks(message);
+      const strictContactHint = `\n\n[HARD REQUIREMENT — onboarding_contact phase: You MUST end this reply with EXACTLY this line, word for word, after answering any question: "Before we go further, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a personalised quote and insights for ${mem.targetCountry || 'your target market'}." Do NOT include the numbered follow-up menu. Do NOT skip this line under any circumstances.]`;
+
+      const { reply, rateLimited, waitSec } = await callClaude(session, message, kbSection, strictContactHint);
+
+      if (rateLimited) {
+        const waitMsg = waitSec <= 30
+          ? `Just a moment — I'll have your answer in about ${waitSec} seconds. Feel free to hold on! ⏳`
+          : `I'm handling several conversations right now — could you give me about a minute? I'll be right with you.`;
+        return res.json({ reply: waitMsg, sessionId, menu: null, phase: state.phase });
+      }
+
+      // Ensure the contact ask is always present, even if Claude omitted it
+      let finalReply = reply || `I'd be happy to help with that, ${mem.name}!`;
+      const contactAsk = `Before we go further, could I grab your email or WhatsApp number, ${mem.name}? Our team will use it to send you a personalised quote and insights for ${mem.targetCountry || 'your target market'}.`;
+      if (!finalReply.toLowerCase().includes('email') && !finalReply.toLowerCase().includes('whatsapp')) {
+        finalReply = finalReply.trimEnd() + `\n\n${contactAsk}`;
+      }
+
+      session.history.push({ role: 'user',      content: truncateMsg(message) });
+      session.history.push({ role: 'assistant', content: truncateMsg(finalReply) });
+      await saveSession(session);
+      return res.json({ reply: finalReply, sessionId, menu: null, phase: state.phase });
+    }
+
+    // ── STEP 4b: Contact was just received in onboarding_contact — confirm and advance ──
     if (contactJustReceived && state.phase === 'onboarding_contact') {
       advancePhase(session);
 
