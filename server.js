@@ -607,58 +607,59 @@ async function extractEntities(msg, mem) {
     const hasAtSymbol = msg.includes('@');
     const hasValidEmailFormat = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/.test(msg);
     
-    // Check for email ownership phrases (expanded to catch "my mail is", "mail is", etc.)
+    // Check for email ownership phrases
     const emailOwnershipPhrases = /(?:my email(?:\s+is|:)?|email me at|reach me at|contact me at|i(?:'m| am) at|you can (?:email|reach) me at|mail is|my mail is|email is|mail id is|my mail id is|my mail|my email)/i;
     const hasEmailPhrase = emailOwnershipPhrases.test(msg);
     
-    // Extract what comes after the email phrase
-    let extractedText = null;
-    if (hasEmailPhrase) {
-      const phraseMatch = msg.match(emailOwnershipPhrases);
-      if (phraseMatch) {
-        const afterPhrase = msg.substring(phraseMatch.index + phraseMatch[0].length).trim();
-        // Get the first word/short phrase after the email indicator
-        extractedText = afterPhrase.match(/^[^\s,.;!?]+/)?.[0] || null;
-      }
-    }
+    // Check if this is clearly NOT an email attempt (greetings, casual conversation)
+    const isClearlyNotEmail = /^(hey|hello|hi|ok|okay|thanks|thank you|sure|yes|no|maybe|wait|hold on|just a moment|brb|sorry|my bad|oops|hmm|um|uh)$/i.test(msg.trim());
+    const isQuestion = msg.includes('?');
+    const isGeneralStatement = /^(i think|i feel|i want|i need|can you|could you|please|help|what about|how about)/i.test(msg);
     
-    // ONLY consider it an email if it has @ symbol AND valid format
-    if (hasAtSymbol && hasValidEmailFormat) {
-      // Extract the actual email
-      const emailMatch = msg.match(EMAIL_RE);
-      if (emailMatch) rawEmail = emailMatch[0];
-    } 
-    // If they used an email phrase but didn't provide @, reject it
-    else if (hasEmailPhrase && extractedText && !extractedText.includes('@')) {
-      console.log(`❌ Invalid email detected: "${extractedText}" (missing @ symbol)`);
-      validationError = {
-        type: 'email',
-        message: `That doesn't look like a valid email address${mem.name ? ', ' + mem.name : ''}. An email address needs to have an "@" symbol and a domain (like name@example.com). Could you please share your correct email address?`,
-      };
-      return { updates, validationError };
-    }
-    // Also check for single words that are obviously not emails
-    else if (msg.trim().split(/\s+/).length === 1 && !msg.includes('@') && msg.length < 30 && msg.length > 2) {
-      // Single word message with no @ - likely not an email
-      const word = msg.trim();
-      // Check if it looks like a name or random text instead of email
-      if (!/^\d+$/.test(word) && word.length < 20) {
-        console.log(`❌ Single word without @ detected: "${word}" - rejecting as email`);
+    // If it's clearly not an email attempt, don't even try to validate as email
+    if (isClearlyNotEmail || isQuestion || isGeneralStatement) {
+      console.log(`📝 Message doesn't look like email attempt: "${msg}" - skipping email validation`);
+      // Don't return validation error - just skip email extraction
+    } else {
+      // Extract what comes after the email phrase
+      let extractedText = null;
+      if (hasEmailPhrase) {
+        const phraseMatch = msg.match(emailOwnershipPhrases);
+        if (phraseMatch) {
+          const afterPhrase = msg.substring(phraseMatch.index + phraseMatch[0].length).trim();
+          // Get the first word/short phrase after the email indicator
+          extractedText = afterPhrase.match(/^[^\s,.;!?]+/)?.[0] || null;
+        }
+      }
+      
+      // ONLY consider it an email if it has @ symbol AND valid format
+      if (hasAtSymbol && hasValidEmailFormat) {
+        // Extract the actual email
+        const emailMatch = msg.match(EMAIL_RE);
+        if (emailMatch) rawEmail = emailMatch[0];
+      } 
+      // If they used an email phrase but didn't provide @, reject it
+      else if (hasEmailPhrase && extractedText && !extractedText.includes('@') && extractedText.length > 2) {
+        console.log(`❌ Invalid email detected: "${extractedText}" (missing @ symbol)`);
         validationError = {
           type: 'email',
-          message: `I need a valid email address${mem.name ? ', ' + mem.name : ''} so our team can reach you. Please share something like "name@company.com" rather than just "${word}".`,
+          message: `That doesn't look like a valid email address${mem.name ? ', ' + mem.name : ''}. An email address needs to have an "@" symbol and a domain (like name@example.com). Could you please share your correct email address?`,
         };
         return { updates, validationError };
       }
-    }
-    // Check for messages that are just random letters (like "jeruuuu" or "zuzuz")
-    else if (msg.trim().split(/\s+/).length === 1 && /^[a-z]{3,20}$/i.test(msg.trim()) && !msg.includes('@')) {
-      console.log(`❌ Random letters without @ detected: "${msg.trim()}" - rejecting as email`);
-      validationError = {
-        type: 'email',
-        message: `That doesn't look like an email address${mem.name ? ', ' + mem.name : ''}. I need a real email with an "@" symbol (like name@company.com). Could you share your correct email?`,
-      };
-      return { updates, validationError };
+      // Check for single words that might be email attempts (but not greetings)
+      else if (msg.trim().split(/\s+/).length === 1 && !msg.includes('@') && msg.length > 2 && msg.length < 30 && !isClearlyNotEmail) {
+        const word = msg.trim();
+        // Only reject as email if it looks like someone trying to type an email username
+        if (/^[a-z0-9._%+\-]+$/i.test(word) && word.length >= 4) {
+          console.log(`❌ Word without @ detected: "${word}" - asking for full email`);
+          validationError = {
+            type: 'email',
+            message: `I need a complete email address${mem.name ? ', ' + mem.name : ''} with an "@" symbol and domain (like ${word}@example.com). Could you share your full email address?`,
+          };
+          return { updates, validationError };
+        }
+      }
     }
 
     if (rawEmail) {
@@ -676,20 +677,25 @@ async function extractEntities(msg, mem) {
     }
   }
 
-  // ── Phone ──
+  // ── Phone ── (similar improvements)
   if (!mem.phone && !validationError) {
-    const phoneMatch = msg.match(PHONE_RE);
-    if (phoneMatch) {
-      const phoneCheck = validatePhone(phoneMatch[0], mem.currentCountry);
-      if (phoneCheck.valid) {
-        updates.phone = phoneCheck.cleaned;
-        console.log(`✅ Phone validated: ${updates.phone}`);
-      } else {
-        console.log(`❌ Phone rejected (${phoneCheck.reason}): ${phoneMatch[0]}`);
-        validationError = {
-          type: 'phone',
-          message: getPhoneFeedback(phoneCheck.reason, mem.name),
-        };
+    // Check if this is clearly not a phone number attempt
+    const isClearlyNotPhone = /^(hey|hello|hi|ok|okay|thanks|thank you|sure|yes|no|maybe)$/i.test(msg.trim());
+    
+    if (!isClearlyNotPhone) {
+      const phoneMatch = msg.match(PHONE_RE);
+      if (phoneMatch) {
+        const phoneCheck = validatePhone(phoneMatch[0], mem.currentCountry);
+        if (phoneCheck.valid) {
+          updates.phone = phoneCheck.cleaned;
+          console.log(`✅ Phone validated: ${updates.phone}`);
+        } else {
+          console.log(`❌ Phone rejected (${phoneCheck.reason}): ${phoneMatch[0]}`);
+          validationError = {
+            type: 'phone',
+            message: getPhoneFeedback(phoneCheck.reason, mem.name),
+          };
+        }
       }
     }
   }
@@ -748,7 +754,6 @@ async function extractEntities(msg, mem) {
 
   return { updates, validationError };
 }
-// ─────────────────────────────────────────────
 // TOPIC DETECTION
 // ─────────────────────────────────────────────
 const TOPIC_REs = [
