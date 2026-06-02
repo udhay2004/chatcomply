@@ -543,11 +543,11 @@ function validatePhone(rawPhone, currentCountry) {
 
 // Human-friendly feedback messages for invalid contact info
 const EMAIL_FEEDBACK = {
-  format:           (name) => `Hmm, that email address doesn't look quite right${name ? ', ' + name : ''} — it might be missing the @ symbol or a proper domain ending. Could you double-check and share it again?`,
-  typo_tld:         (name) => `There might be a small typo in that email${name ? ', ' + name : ''} — the ending doesn't look right (e.g. ".cmo" instead of ".com"). Could you re-enter it?`,
-  fake_domain:      (name) => `That doesn't look like a real email address${name ? ', ' + name : ''}. Our team will need a valid email to follow up — could you share your actual one?`,
-  domain_not_found: (name) => `I couldn't verify that email domain${name ? ', ' + name : ''} — it doesn't appear to exist. Could you double-check the spelling and try again?`,
-  default:          (name) => `That email doesn't seem to be valid${name ? ', ' + name : ''}. Could you share it again?`,
+  format:           (name) => `That doesn't look like a valid email address${name ? ', ' + name : ''}. Email addresses need an "@" symbol and a domain (like name@company.com). Could you share your correct email?`,
+  typo_tld:         (name) => `There might be a small typo in that email${name ? ', ' + name : ''} — the ending doesn't look right. Could you double-check and re-enter it?`,
+  fake_domain:      (name) => `That doesn't look like a real email address${name ? ', ' + name : ''}. Our team will need a valid email to follow up with you.`,
+  domain_not_found: (name) => `I couldn't verify that email domain${name ? ', ' + name : ''}. Could you double-check the spelling and try again?`,
+  default:          (name) => `I need a valid email address to help you further${name ? ', ' + name : ''}. Please share your email in the format name@example.com.`,
 };
 
 const PHONE_FEEDBACK = {
@@ -586,8 +586,9 @@ const SERVICE_MAP = {
   'fundrais': 'Fundraising', 'vc ': 'Fundraising', 'investor': 'Fundraising',
 };
 
+
 const EMAIL_RE           = /\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/;
-const EMAIL_OWNERSHIP_RE = /(?:my email(?:\s+is|:)?|email me at|reach me at|contact me at|i(?:'m| am) at|you can (?:email|reach) me at)\s*:?\s*([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})/i;
+const EMAIL_OWNERSHIP_RE = /(?:my email(?:\s+is|:)?|email me at|reach me at|contact me at|i(?:'m| am) at|you can (?:email|reach) me at|mail is|my mail is|email is|mail id is|my mail id is|my mail|my email)\s*:?\s*([^\s,.;!?]+)/i;
 const PHONE_RE           = /(?:\+?\d[\d\s\-]{8,14}\d)/;
 const EXPAND_INTENT_RE   = /expand|incorporat|setup|set up|open|register|move|launch|start|going to|looking at|consider|want to|thinking about/i;
 const NEGATION_RE        = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
@@ -602,39 +603,68 @@ async function extractEntities(msg, mem) {
   if (!mem.email) {
     let rawEmail = null;
     
-    // STRICT: Only extract if message has @ symbol and proper domain pattern
+    // Check if this looks like a real email (must have @ and domain)
     const hasAtSymbol = msg.includes('@');
-    const hasValidFormat = /@[^.]+\.[a-z]{2,}/i.test(msg);
+    const hasValidEmailFormat = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/.test(msg);
     
-    if (hasAtSymbol && hasValidFormat) {
-      const ownershipMatch = msg.match(EMAIL_OWNERSHIP_RE);
-      if (ownershipMatch) {
-        rawEmail = ownershipMatch[1];
-      } else if (/\bmy\b/i.test(msg)) {
-        const genericMatch = msg.match(EMAIL_RE);
-        if (genericMatch) rawEmail = genericMatch[0];
-      } else {
-        const anyEmail = msg.match(EMAIL_RE);
-        if (anyEmail) rawEmail = anyEmail[0];
+    // Check for email ownership phrases (expanded to catch "my mail is", "mail is", etc.)
+    const emailOwnershipPhrases = /(?:my email(?:\s+is|:)?|email me at|reach me at|contact me at|i(?:'m| am) at|you can (?:email|reach) me at|mail is|my mail is|email is|mail id is|my mail id is|my mail|my email)/i;
+    const hasEmailPhrase = emailOwnershipPhrases.test(msg);
+    
+    // Extract what comes after the email phrase
+    let extractedText = null;
+    if (hasEmailPhrase) {
+      const phraseMatch = msg.match(emailOwnershipPhrases);
+      if (phraseMatch) {
+        const afterPhrase = msg.substring(phraseMatch.index + phraseMatch[0].length).trim();
+        // Get the first word/short phrase after the email indicator
+        extractedText = afterPhrase.match(/^[^\s,.;!?]+/)?.[0] || null;
       }
     }
     
-    // Check if user mentioned email but provided garbage
-    const mentionedEmail = /\b(email|mail|contact|reach)\b/i.test(msg);
-    const isSingleWordNoAt = !msg.includes('@') && !msg.includes(' ') && msg.length < 30;
-    
-    if (mentionedEmail && isSingleWordNoAt && !rawEmail) {
+    // ONLY consider it an email if it has @ symbol AND valid format
+    if (hasAtSymbol && hasValidEmailFormat) {
+      // Extract the actual email
+      const emailMatch = msg.match(EMAIL_RE);
+      if (emailMatch) rawEmail = emailMatch[0];
+    } 
+    // If they used an email phrase but didn't provide @, reject it
+    else if (hasEmailPhrase && extractedText && !extractedText.includes('@')) {
+      console.log(`❌ Invalid email detected: "${extractedText}" (missing @ symbol)`);
       validationError = {
         type: 'email',
-        message: getEmailFeedback('format', mem.name),
+        message: `That doesn't look like a valid email address${mem.name ? ', ' + mem.name : ''}. An email address needs to have an "@" symbol and a domain (like name@example.com). Could you please share your correct email address?`,
       };
       return { updates, validationError };
     }
-    
+    // Also check for single words that are obviously not emails
+    else if (msg.trim().split(/\s+/).length === 1 && !msg.includes('@') && msg.length < 30 && msg.length > 2) {
+      // Single word message with no @ - likely not an email
+      const word = msg.trim();
+      // Check if it looks like a name or random text instead of email
+      if (!/^\d+$/.test(word) && word.length < 20) {
+        console.log(`❌ Single word without @ detected: "${word}" - rejecting as email`);
+        validationError = {
+          type: 'email',
+          message: `I need a valid email address${mem.name ? ', ' + mem.name : ''} so our team can reach you. Please share something like "name@company.com" rather than just "${word}".`,
+        };
+        return { updates, validationError };
+      }
+    }
+    // Check for messages that are just random letters (like "jeruuuu" or "zuzuz")
+    else if (msg.trim().split(/\s+/).length === 1 && /^[a-z]{3,20}$/i.test(msg.trim()) && !msg.includes('@')) {
+      console.log(`❌ Random letters without @ detected: "${msg.trim()}" - rejecting as email`);
+      validationError = {
+        type: 'email',
+        message: `That doesn't look like an email address${mem.name ? ', ' + mem.name : ''}. I need a real email with an "@" symbol (like name@company.com). Could you share your correct email?`,
+      };
+      return { updates, validationError };
+    }
+
     if (rawEmail) {
-      const emailCheck = await validateEmail(rawEmail, { skipDNS: false });
+      const emailCheck = await validateEmail(rawEmail);
       if (emailCheck.valid) {
-        updates.email = emailCheck.cleaned || rawEmail.trim().toLowerCase();
+        updates.email = rawEmail.trim().toLowerCase();
         console.log(`✅ Email validated: ${updates.email}`);
       } else {
         console.log(`❌ Email rejected (${emailCheck.reason}): ${rawEmail}`);
