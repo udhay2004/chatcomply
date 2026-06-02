@@ -362,12 +362,24 @@ function extractName(msg) {
  * Returns { valid: boolean, reason: string|null }
  * Checks: format → typo TLDs → fake/disposable domains → DNS MX lookup
  */
-async function validateEmail(email) {
+/**
+ * validateEmail(email)
+ * Returns { valid: boolean, reason: string|null, cleaned?: string }
+ * Checks: format → typo TLDs → fake/disposable domains → DNS MX lookup
+ */
+async function validateEmail(email, options = { skipDNS: false }) {
   if (!email || typeof email !== 'string') {
     return { valid: false, reason: 'empty' };
   }
 
-  const trimmed = email.trim().toLowerCase();
+  let trimmed = email.trim().toLowerCase();
+  
+  // Try to fix common typos before validation
+  const preCleaned = preCleanEmail(trimmed);
+  if (preCleaned.cleaned && preCleaned.hadTypo) {
+    console.log(`🔧 Auto-fixed email typo: "${trimmed}" → "${preCleaned.cleaned}"`);
+    trimmed = preCleaned.cleaned;
+  }
 
   // 1. Format check
   const FORMAT_RE = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/;
@@ -398,31 +410,83 @@ async function validateEmail(email) {
     return { valid: false, reason: 'fake_domain' };
   }
 
-  // 4. DNS MX record lookup — verifies the domain actually accepts mail
-  //    Uses Google DNS-over-HTTPS (no extra package needed)
-  //    Fails open: if DNS lookup errors, we pass through rather than block a valid email
-  try {
-    const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`;
-    const dnsRes = await fetch(dnsUrl, { timeout: 4000 });
-    if (dnsRes.ok) {
-      const dnsData = await dnsRes.json();
-      // Status 3 = NXDOMAIN (domain doesn't exist at all)
-      if (dnsData.Status === 3) {
-        return { valid: false, reason: 'domain_not_found' };
+  // 4. DNS MX record lookup (optional with timeout)
+  if (!options.skipDNS) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`;
+      const dnsRes = await fetch(dnsUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      if (dnsRes.ok) {
+        const dnsData = await dnsRes.json();
+        // Status 3 = NXDOMAIN (domain doesn't exist at all)
+        if (dnsData.Status === 3) {
+          return { valid: false, reason: 'domain_not_found' };
+        }
+        if (dnsData.Status !== 0) {
+          return { valid: false, reason: 'domain_not_found' };
+        }
+        // Status 0 with no Answer AND no Authority = likely non-existent domain
+        if (!dnsData.Answer && !dnsData.Authority) {
+          return { valid: false, reason: 'domain_not_found' };
+        }
       }
-      if (dnsData.Status !== 0) {
-        return { valid: false, reason: 'domain_not_found' };
-      }
-      // Status 0 with no Answer AND no Authority = likely non-existent domain
-      if (!dnsData.Answer && !dnsData.Authority) {
-        return { valid: false, reason: 'domain_not_found' };
-      }
+    } catch (dnsErr) {
+      console.warn('⚠️ DNS MX check failed (non-blocking):', dnsErr.message);
+      // Don't fail validation due to DNS timeout/error
     }
-  } catch (dnsErr) {
-    console.warn('⚠️ DNS MX check failed (non-blocking):', dnsErr.message);
   }
 
-  return { valid: true, reason: null };
+  return { valid: true, reason: null, cleaned: trimmed };
+}
+
+/**
+ * preCleanEmail - Detect and fix common email typos before validation
+ * Returns { cleaned: string|null, hadTypo: boolean }
+ */
+function preCleanEmail(rawText) {
+  if (!rawText || typeof rawText !== 'string') return { cleaned: null, hadTypo: false };
+  
+  const text = rawText.trim().toLowerCase();
+  
+  // Pattern 1: "username gmail.com" or "username gmail" (missing @)
+  const missingAtGmail = /^([a-z0-9._%+\-]+)\s+gmail(?:\.com)?$/i;
+  let match = text.match(missingAtGmail);
+  if (match) {
+    return { cleaned: `${match[1]}@gmail.com`, hadTypo: true };
+  }
+  
+  // Pattern 2: "username yahoo.com" or "username yahoo"
+  const missingAtYahoo = /^([a-z0-9._%+\-]+)\s+yahoo(?:\.com)?$/i;
+  match = text.match(missingAtYahoo);
+  if (match) {
+    return { cleaned: `${match[1]}@yahoo.com`, hadTypo: true };
+  }
+  
+  // Pattern 3: "username hotmail.com" or "username hotmail"
+  const missingAtHotmail = /^([a-z0-9._%+\-]+)\s+hotmail(?:\.com)?$/i;
+  match = text.match(missingAtHotmail);
+  if (match) {
+    return { cleaned: `${match[1]}@hotmail.com`, hadTypo: true };
+  }
+  
+  // Pattern 4: "username at gmail dot com"
+  const atDotPattern = /^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9]+)\s+dot\s+(com|net|org)$/i;
+  match = text.match(atDotPattern);
+  if (match) {
+    return { cleaned: `${match[1]}@${match[2]}.${match[3]}`, hadTypo: true };
+  }
+  
+  // Pattern 5: "username@gmail" (missing TLD)
+  const missingTLD = /^([a-z0-9._%+\-]+@[a-z0-9.\-]+)$/i;
+  match = text.match(missingTLD);
+  if (match && !text.includes('.com') && !text.includes('.net') && !text.includes('.org')) {
+    return { cleaned: `${match[1]}.com`, hadTypo: true };
+  }
+  
+  return { cleaned: null, hadTypo: false };
 }
 
 /**
@@ -529,6 +593,7 @@ const EXPAND_INTENT_RE   = /expand|incorporat|setup|set up|open|register|move|la
 const NEGATION_RE        = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
 
 // ✅ Now async because validateEmail does a DNS check
+// ✅ Now async because validateEmail does a DNS check
 async function extractEntities(msg, mem) {
   const lower   = msg.toLowerCase();
   const updates = {};
@@ -537,6 +602,8 @@ async function extractEntities(msg, mem) {
   // ── Email ──
   if (!mem.email) {
     let rawEmail = null;
+    let cleanedEmail = null;
+    
     const ownershipMatch = msg.match(EMAIL_OWNERSHIP_RE);
     if (ownershipMatch) {
       rawEmail = ownershipMatch[1];
@@ -544,14 +611,34 @@ async function extractEntities(msg, mem) {
       const genericMatch = msg.match(EMAIL_RE);
       if (genericMatch) rawEmail = genericMatch[0];
     } else {
+      // Check for any email pattern
       const anyEmail = msg.match(EMAIL_RE);
-      if (anyEmail) rawEmail = anyEmail[0];
+      if (anyEmail) {
+        rawEmail = anyEmail[0];
+      } else {
+        // Try to extract and fix typos from the entire message
+        // Look for patterns like "username gmail" or "username at gmail dot com"
+        const words = msg.split(/\s+/);
+        for (let i = 0; i < words.length - 1; i++) {
+          const possibleEmail = words[i] + ' ' + words[i+1];
+          const cleaned = preCleanEmail(possibleEmail);
+          if (cleaned.cleaned && cleaned.hadTypo) {
+            rawEmail = cleaned.cleaned;
+            cleanedEmail = rawEmail;
+            console.log(`🔧 Fixed email typo from phrase: "${possibleEmail}" → "${rawEmail}"`);
+            break;
+          }
+        }
+      }
     }
 
     if (rawEmail) {
-      const emailCheck = await validateEmail(rawEmail);
+      // Use the cleaned version if available
+      const emailToValidate = cleanedEmail || rawEmail;
+      const emailCheck = await validateEmail(emailToValidate, { skipDNS: false });
+      
       if (emailCheck.valid) {
-        updates.email = rawEmail.trim().toLowerCase();
+        updates.email = emailCheck.cleaned || emailToValidate.trim().toLowerCase();
         console.log(`✅ Email validated: ${updates.email}`);
       } else {
         console.log(`❌ Email rejected (${emailCheck.reason}): ${rawEmail}`);
@@ -582,7 +669,7 @@ async function extractEntities(msg, mem) {
   }
 
   // ── Company name ──
-  if (!mem.companyName) {
+  if (!mem.companyName && !validationError) {
     const companyMatch = msg.match(/(?:my company(?:\s+is)?|our company(?:\s+is)?|company name(?:\s+is)?|company:|firm:)\s+([A-Za-z0-9\s&.,'\-]{2,40}?)(?:\s*[,.]|$)/i);
     if (companyMatch) {
       const candidate = companyMatch[1].trim();
@@ -593,7 +680,7 @@ async function extractEntities(msg, mem) {
   }
 
   // ── Target countries ──
-  if (!NEGATION_RE.test(lower)) {
+  if (!validationError && !NEGATION_RE.test(lower)) {
     for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
       if (lower.includes(kw) && EXPAND_INTENT_RE.test(lower)) {
         const existing = mem.targetCountries || [];
@@ -607,10 +694,10 @@ async function extractEntities(msg, mem) {
   }
 
   // ── Current country ──
-  if (!mem.currentCountry && /\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur)\b/i.test(lower)) {
+  if (!mem.currentCountry && !validationError && /\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur)\b/i.test(lower)) {
     updates.currentCountry = 'India';
   }
-  if (!mem.currentCountry) {
+  if (!mem.currentCountry && !validationError) {
     const basedMatch = lower.match(/(?:based in|currently based in|i(?:'m| am) in|living in|from)\s+([a-z\s]+?)(?:\s|,|$)/);
     if (basedMatch) {
       const place = basedMatch[1].trim();
@@ -620,20 +707,21 @@ async function extractEntities(msg, mem) {
   }
 
   // ── Services ──
-  for (const [kw, svc] of Object.entries(SERVICE_MAP)) {
-    if (lower.includes(kw)) {
-      const existing = mem.servicesDiscussed || [];
-      if (!existing.includes(svc)) {
-        updates.servicesDiscussed = [...existing, svc];
-        updates.serviceNeeded     = (updates.servicesDiscussed || existing)[0];
+  if (!validationError) {
+    for (const [kw, svc] of Object.entries(SERVICE_MAP)) {
+      if (lower.includes(kw)) {
+        const existing = mem.servicesDiscussed || [];
+        if (!existing.includes(svc)) {
+          updates.servicesDiscussed = [...existing, svc];
+          updates.serviceNeeded     = (updates.servicesDiscussed || existing)[0];
+        }
+        break;
       }
-      break;
     }
   }
 
   return { updates, validationError };
 }
-
 // ─────────────────────────────────────────────
 // TOPIC DETECTION
 // ─────────────────────────────────────────────
@@ -1176,31 +1264,40 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // ── ENTITY EXTRACTION (now async, returns validationError) ──
+    // CHANGE 1: Extract name first (synchronous)
     if (!mem.name) {
       const n = extractName(message);
-      if (n) { mem.name = n; console.log(`✅ Name locked: ${n}`); }
+      if (n) { 
+        mem.name = n; 
+        console.log(`✅ Name locked: ${n}`);
+      }
     }
 
-    // ✅ VALIDATION: extractEntities now validates email/phone before storing
+    // CHANGE 2: Extract entities with validation (async)
     const { updates: entityUpdates, validationError } = await extractEntities(message, mem);
 
-    // If user gave an invalid email or phone, reply immediately with correction prompt
-    // WITHOUT passing the bad value to memory, WITHOUT calling Claude
+    // CHANGE 3: Handle validation error immediately if contact info is invalid
     if (validationError) {
-      session.history.push({ role: 'user',      content: truncateMsg(message)           });
-      session.history.push({ role: 'assistant', content: validationError.message         });
+      console.log(`🚫 VALIDATION FAILED: ${validationError.type} - ${validationError.message.substring(0, 100)}`);
+      
+      // Store only the validation response in history, not the invalid user message
+      session.history.push({ role: 'assistant', content: validationError.message });
       await saveSession(session);
+      
       return res.json({
-        reply:     validationError.message,
+        reply: validationError.message,
         sessionId,
-        menu:      null,
-        phase:     state.phase,
+        menu: null,
+        phase: state.phase,
+        validationFailed: true,  // Frontend can use this
+        errorType: validationError.type  // 'email' or 'phone'
       });
     }
 
+    // Apply valid entity updates
     if (Object.keys(entityUpdates).length > 0) {
       Object.assign(mem, entityUpdates);
-      console.log(`📝 Entities:`, entityUpdates);
+      console.log(`📝 Entities saved:`, Object.keys(entityUpdates));
     }
 
     // Topic tracking
