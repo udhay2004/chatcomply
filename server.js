@@ -546,16 +546,23 @@ async function extractEntities(msg, mem) {
       }
     }
   }
+
+  // Company name
+  if (!mem.companyName && !validationError) {
+    const companyMatch = msg.match(/(?:my company(?:\s+is)?|our company(?:\s+is)?|company name(?:\s+is)?|company:|firm:)\s+([A-Za-z0-9\s&.,'\-]{2,40}?)(?:\s*[,.]|$)/i);
+    if (companyMatch) {
+      const candidate = companyMatch[1].trim();
+      if (candidate.length >= 2 && !NAME_BLACKLIST.has(candidate.toLowerCase())) updates.companyName = candidate;
+    }
+  }
+
   // Target countries
-  // Target countries — FIX 3: short replies (e.g. just "UAE") don't need expand intent
   if (!validationError && !NEGATION_RE.test(lower)) {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
       const hasExpandIntent = EXPAND_INTENT_RE.test(lower);
-      // Accept if: has expand intent, OR message is short (likely a direct answer to "which market?")
       const isShortReply = lower.trim().length <= 40;
-      if (hasCountry && (hasExpandIntent || isShortReply))
-      {
+      if (hasCountry && (hasExpandIntent || isShortReply)) {
         const country  = COUNTRY_MAP[kw];
         const existing = mem.targetCountries || [];
         if (!existing.includes(country)) {
@@ -567,27 +574,11 @@ async function extractEntities(msg, mem) {
     }
   }
 
-  // Current country — FIX: more robust detection including bare country name replies
-  if (!mem.currentCountry && !validationError) {
-    if (/\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur)\b/i.test(lower)) {
-      updates.currentCountry = 'India';
-    } else {
-      // Try phrase-based detection first
-      const basedMatch = lower.match(/(?:based in|currently based in|i(?:'m| am) in|living in|from|i'm from|i am from|currently in)\s+([a-z\s]{2,30?)(?:\s|,|\.|$)/);
-      if (basedMatch) {
-        const place  = basedMatch[1].trim();
-        const mapped = COUNTRY_MAP[place];
-        if (mapped) updates.currentCountry = mapped;
-      }
-      // FIX: Also try bare keyword match — user might just type "India" or "UAE"
-      // Only do this if message is short (likely a direct answer to "which country are you in?")
-      // Current country — FIX 2: fixed regex (was broken with {2,30?} lazy+consuming end), 
-  // now uses multiple simple patterns + bare keyword fallback
+  // Current country
   if (!mem.currentCountry && !validationError) {
     if (/\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur|i(?:'m| am) indian)\b/i.test(lower)) {
       updates.currentCountry = 'India';
     } else {
-      // FIX: replaced broken {2,30?} regex with separate simple patterns
       const basedPatterns = [
         /\bbased in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
         /\bi(?:'m| am) (?:based |currently )?in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
@@ -601,8 +592,10 @@ async function extractEntities(msg, mem) {
         if (bm) {
           const place  = bm[1].trim().replace(/\s+/g, ' ');
           const mapped = COUNTRY_MAP[place];
-          if (mapped) { updates.currentCountry = mapped; break; }
-          // Partial keyword match within the phrase
+          if (mapped) { 
+            updates.currentCountry = mapped; 
+            break; 
+          }
           for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
             if (place === kw || place.startsWith(kw + ' ') || place.endsWith(' ' + kw)) {
               updates.currentCountry = country;
@@ -612,7 +605,6 @@ async function extractEntities(msg, mem) {
           if (updates.currentCountry) break;
         }
       }
-      // Bare keyword fallback — user just types "India" or "UAE" as direct answer
       if (!updates.currentCountry && lower.trim().length <= 35) {
         const bare = lower.trim();
         for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
