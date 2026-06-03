@@ -94,11 +94,14 @@ async function connectMongo() {
     try { await sessionsCol.dropIndex('lastActive_1'); } catch (_) {}
     await sessionsCol.createIndex({ lastActive: 1 }, { expireAfterSeconds: 86400 });
 
-    // FIX: leads indexes — drop and recreate to avoid stale unique constraints
+    // leads indexes — drop and recreate to avoid stale unique constraints
     try { await leadsCol.dropIndex('email_1'); } catch (_) {}
     await leadsCol.createIndex({ email: 1 }, { sparse: true });
     try { await leadsCol.dropIndex('phone_1'); } catch (_) {}
     await leadsCol.createIndex({ phone: 1 }, { sparse: true });
+    // NEW: sessionId index on leads so savePartialLead can upsert by session
+    try { await leadsCol.dropIndex('sessionId_1'); } catch (_) {}
+    await leadsCol.createIndex({ sessionId: 1 }, { sparse: true });
 
     mongoOk    = true;
     mongoError = null;
@@ -306,7 +309,7 @@ const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|ban
 
 function extractName(msg) {
   const t = msg.trim();
-  if (t.length > 120) return null; // slightly relaxed limit for intro sentences
+  if (t.length > 120) return null;
   if (t.includes('?')) return null;
   const lower = t.toLowerCase();
 
@@ -359,14 +362,12 @@ function stripHallucinatedName(reply, knownName) {
 
 // ─────────────────────────────────────────────
 // EMAIL VALIDATION
-// FIX: preCleanEmail applied FIRST, DNS timeout increased, better error handling
 // ─────────────────────────────────────────────
 async function validateEmail(rawInput, options = { skipDNS: false }) {
   if (!rawInput || typeof rawInput !== 'string') {
     return { valid: false, reason: 'empty' };
   }
 
-  // Step 1: pre-clean for common typos BEFORE format check
   const preCleaned = preCleanEmail(rawInput.trim().toLowerCase());
   const trimmed = (preCleaned.cleaned && preCleaned.hadTypo) ? preCleaned.cleaned : rawInput.trim().toLowerCase();
 
@@ -374,13 +375,11 @@ async function validateEmail(rawInput, options = { skipDNS: false }) {
     console.log(`🔧 Auto-fixed email: "${rawInput.trim()}" → "${trimmed}"`);
   }
 
-  // Step 2: format check
   const FORMAT_RE = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/;
   if (!FORMAT_RE.test(trimmed)) {
     return { valid: false, reason: 'format', attempted: rawInput.trim() };
   }
 
-  // Step 3: typo TLD check
   const TYPO_TLDS = ['.cmo', '.cim', '.con', '.cpm', '.ocm', '.kom',
                      '.conm', '.coom', '.gmal', '.gmial', '.yaho', '.yhaoo',
                      '.gamil', '.gmaill', '.cm', '.om'];
@@ -388,7 +387,6 @@ async function validateEmail(rawInput, options = { skipDNS: false }) {
     return { valid: false, reason: 'typo_tld', attempted: trimmed };
   }
 
-  // Step 4: fake/disposable domain check
   const [, domain] = trimmed.split('@');
   const FAKE_DOMAINS = new Set([
     'test.com', 'example.com', 'example.org', 'example.net',
@@ -402,29 +400,24 @@ async function validateEmail(rawInput, options = { skipDNS: false }) {
     return { valid: false, reason: 'fake_domain', attempted: trimmed };
   }
 
-  // Step 5: DNS MX check (optional, skip if flag set)
   if (!options.skipDNS) {
     try {
       const controller = new AbortController();
-      const timeoutId  = setTimeout(() => controller.abort(), 5000); // increased to 5s
+      const timeoutId  = setTimeout(() => controller.abort(), 5000);
       const dnsUrl     = `https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`;
       const dnsRes     = await fetch(dnsUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (dnsRes.ok) {
         const dnsData = await dnsRes.json();
-        // Status 3 = NXDOMAIN (domain doesn't exist)
         if (dnsData.Status === 3) {
           return { valid: false, reason: 'domain_not_found', attempted: trimmed };
         }
-        // Status 0 = success, but check if there's actually an answer
         if (dnsData.Status === 0 && !dnsData.Answer && !dnsData.Authority) {
-          // No MX records at all — but don't reject; some real domains lack MX
           console.log(`⚠️ No MX records for ${domain} — accepting anyway`);
         }
       }
     } catch (dnsErr) {
-      // DNS check failed (timeout, network, etc.) — don't reject the email for this
       console.warn(`⚠️ DNS check skipped for ${domain}: ${dnsErr.message}`);
     }
   }
@@ -436,7 +429,6 @@ function preCleanEmail(rawText) {
   if (!rawText || typeof rawText !== 'string') return { cleaned: null, hadTypo: false };
   const text = rawText.trim().toLowerCase();
 
-  // "john gmail.com" or "john gmail" → "john@gmail.com"
   const missingAtGmail   = /^([a-z0-9._%+\-]+)\s+gmail(?:\.com)?$/i;
   const missingAtYahoo   = /^([a-z0-9._%+\-]+)\s+yahoo(?:\.com)?$/i;
   const missingAtHotmail = /^([a-z0-9._%+\-]+)\s+hotmail(?:\.com)?$/i;
@@ -448,15 +440,12 @@ function preCleanEmail(rawText) {
   if ((match = text.match(missingAtHotmail))) return { cleaned: `${match[1]}@hotmail.com`, hadTypo: true };
   if ((match = text.match(missingAtOutlook))) return { cleaned: `${match[1]}@outlook.com`, hadTypo: true };
 
-  // "john at gmail dot com"
   const atDotPattern = /^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9]+)\s+dot\s+(com|net|org|in|io|co)$/i;
   if ((match = text.match(atDotPattern))) return { cleaned: `${match[1]}@${match[2]}.${match[3]}`, hadTypo: true };
 
-  // "john at company.com"
   const atDomain = /^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9.\-]+\.[a-z]{2,})$/i;
   if ((match = text.match(atDomain))) return { cleaned: `${match[1]}@${match[2]}`, hadTypo: true };
 
-  // Fix common TLD typos
   const typoMap = {
     '.cmo': '.com', '.cim': '.com', '.conm': '.com', '.coom': '.com',
     '.gmal': '.gmail', '.gmial': '.gmail',
@@ -473,12 +462,10 @@ function preCleanEmail(rawText) {
 
 // ─────────────────────────────────────────────
 // PHONE VALIDATION
-// FIX: Much more robust — handles Indian numbers, international with/without +
 // ─────────────────────────────────────────────
 function validatePhone(rawPhone, currentCountry) {
   if (!rawPhone) return { valid: false, reason: 'empty', cleaned: null };
 
-  // Strip all formatting except + at start
   const stripped = rawPhone.trim();
   const hasPlus  = stripped.startsWith('+');
   const digitsOnly = stripped.replace(/\D/g, '');
@@ -487,7 +474,6 @@ function validatePhone(rawPhone, currentCountry) {
     return { valid: false, reason: 'format', cleaned: null };
   }
 
-  // ── India context detection ──
   const isIndiaContext =
     stripped.startsWith('+91') ||
     stripped.startsWith('091') ||
@@ -509,7 +495,6 @@ function validatePhone(rawPhone, currentCountry) {
     return { valid: true, reason: null, cleaned: '+91' + local };
   }
 
-  // ── International number with + prefix ──
   if (hasPlus) {
     if (digitsOnly.length < 7)  return { valid: false, reason: 'too_short', cleaned: null };
     if (digitsOnly.length > 15) return { valid: false, reason: 'too_long', cleaned: null };
@@ -517,19 +502,14 @@ function validatePhone(rawPhone, currentCountry) {
     return { valid: true, reason: null, cleaned: '+' + digitsOnly };
   }
 
-  // ── 10-digit without country code ──
-  // Could be US/Canada (North America) — accept if it looks valid
   if (digitsOnly.length === 10 && /^[2-9]/.test(digitsOnly)) {
-    // Possibly a North American number — ask for country code to be safe
     return { valid: false, reason: 'missing_country_code', cleaned: null };
   }
 
-  // ── Other digit strings ──
   if (digitsOnly.length < 7)  return { valid: false, reason: 'too_short', cleaned: null };
   if (digitsOnly.length > 15) return { valid: false, reason: 'too_long', cleaned: null };
   if (/^(.)\1+$/.test(digitsOnly)) return { valid: false, reason: 'placeholder', cleaned: null };
 
-  // 11+ digits without + — probably has country code prefix, accept it
   return { valid: true, reason: null, cleaned: '+' + digitsOnly };
 }
 
@@ -564,23 +544,18 @@ function getPhoneFeedback(reason, name) {
 
 // ─────────────────────────────────────────────
 // CONTACT DETECTION HELPERS
-// FIX: More permissive phone detection — catches +91XXXXXXXXXX, 00XX formats
 // ─────────────────────────────────────────────
 function detectEmailAttempt(msg) {
-  // Strip trailing/embedded timestamps
   const withoutTimestamp = msg
     .replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '')
     .trim();
 
-  // Standard email pattern
   const standardMatch = withoutTimestamp.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/);
   if (standardMatch) return standardMatch[0];
 
-  // "john at gmail dot com"
   const atDotMatch = withoutTimestamp.match(/\b([A-Za-z0-9._%+\-]+)\s+at\s+([A-Za-z0-9]+)\s+dot\s+(com|net|org|co\.in|in)\b/i);
   if (atDotMatch) return `${atDotMatch[1]}@${atDotMatch[2]}.${atDotMatch[3]}`;
 
-  // "john gmail.com" or "john gmail"
   const missingAt = withoutTimestamp.match(/^([A-Za-z0-9._%+\-]+)\s+(gmail|yahoo|hotmail|outlook)(?:\.com)?$/i);
   if (missingAt) return `${missingAt[1]}@${missingAt[2]}.com`;
 
@@ -589,21 +564,16 @@ function detectEmailAttempt(msg) {
 
 function detectPhoneAttempt(msg) {
   const cleaned = msg.trim()
-    .replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '') // strip timestamps
+    .replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '')
     .trim();
 
-  // Must be primarily a phone number — not a sentence
-  // Allow: +91 98765 43210 | 00919876543210 | +1-415-555-0100 | 9876543210 etc.
   const PHONE_RE = /^[\+0]?[\d\s\-().]{7,20}$/;
   if (!PHONE_RE.test(cleaned)) return null;
 
   const digitsOnly = cleaned.replace(/\D/g, '');
   if (digitsOnly.length < 7 || digitsOnly.length > 15) return null;
 
-  // Reject pure years
   if (digitsOnly.length === 4 && /^[12]/.test(digitsOnly)) return null;
-
-  // Reject if it looks like a price or other number
   if (cleaned.includes('$') || cleaned.includes('€') || cleaned.includes('₹')) return null;
 
   return cleaned;
@@ -873,8 +843,9 @@ FIRST MESSAGE BEHAVIOR:
 
 ONBOARDING FLOW:
 - Follow PHASE instructions in the context block exactly.
-- Once you have name + target market + contact info, switch fully to advisory mode.
+- Flow is: name → current country (where they're based) → target country (where they want to expand) → contact info → advisory.
 - NEVER ask name and country in the same message.
+- NEVER ask current country and target country in the same message.
 - If asked "do you remember my name" and you have it in [USER CONTEXT]: state it. If you don't: ask for it.
 
 ADVISORY RESPONSES:
@@ -989,12 +960,18 @@ async function callClaude(session, userMessage, kbSection, phaseHint) {
 
 // ─────────────────────────────────────────────
 // PHASE ADVANCEMENT LOGIC
+// Flow: name → current country → target country → contact → advisory
 // ─────────────────────────────────────────────
 function advancePhase(session) {
   const { memory: mem, state } = session;
 
   if (state.phase === 'new' || state.phase === 'onboarding_name') {
-    state.phase = mem.name ? 'onboarding_country' : 'onboarding_name';
+    state.phase = mem.name ? 'onboarding_current_country' : 'onboarding_name';
+    return;
+  }
+
+  if (state.phase === 'onboarding_current_country') {
+    state.phase = mem.currentCountry ? 'onboarding_country' : 'onboarding_current_country';
     return;
   }
 
@@ -1033,10 +1010,10 @@ function checkMemoryRecall(msg, session) {
   }
   if (isContextQuestion) {
     const parts = [];
-    if (mem.name)          parts.push(`your name is ${mem.name}`);
-    if (mem.targetCountry) parts.push(`you're exploring ${mem.targetCountry}`);
+    if (mem.name)           parts.push(`your name is ${mem.name}`);
     if (mem.currentCountry) parts.push(`you're based in ${mem.currentCountry}`);
-    if (mem.serviceNeeded) parts.push(`you're interested in ${mem.serviceNeeded}`);
+    if (mem.targetCountry)  parts.push(`you're exploring ${mem.targetCountry}`);
+    if (mem.serviceNeeded)  parts.push(`you're interested in ${mem.serviceNeeded}`);
     if (state.topicsDiscussed.length > 0) parts.push(`we've discussed ${state.topicsDiscussed.slice(-3).join(', ')}`);
     return parts.length
       ? `Here's what I have: ${parts.join(', ')}. Anything you'd like to update or dive into?`
@@ -1047,11 +1024,67 @@ function checkMemoryRecall(msg, session) {
 
 // ─────────────────────────────────────────────
 // LEAD PERSISTENCE
-// FIX: saveLead always does upsert and ALWAYS updates — so name captured later
-//      will be written back even if lead was already saved without a name.
 // ─────────────────────────────────────────────
 function isLeadSaveable(mem) {
   return !!(mem.email || mem.phone);
+}
+
+// savePartialLead — saves ANY visitor to MongoDB as soon as we have their name.
+// Uses sessionId as the upsert key so no duplicates. Marks as partial=true
+// until contact info arrives. This ensures EVERY chat visitor is captured.
+async function savePartialLead(session) {
+  if (!leadsCol) {
+    console.warn('⚠️ savePartialLead: leadsCol is null — MongoDB not connected');
+    return;
+  }
+  const { memory: mem, state } = session;
+
+  // Don't save if we have absolutely nothing
+  if (!mem.name && !mem.email && !mem.phone) return;
+
+  const leadData = {
+    name:                mem.name               || null,
+    email:               mem.email              || null,
+    phone:               mem.phone              || null,
+    companyName:         mem.companyName        || null,
+    currentCountry:      mem.currentCountry     || null,
+    targetCountry:       mem.targetCountry      || null,
+    targetCountries:     mem.targetCountries    || [],
+    serviceNeeded:       mem.serviceNeeded      || null,
+    servicesDiscussed:   mem.servicesDiscussed  || [],
+    topicsDiscussed:     state.topicsDiscussed  || [],
+    conversationSummary: mem.conversationSummary || '',
+    sessionId:           session.sessionId,
+    source:              'website',
+    partial:             !(mem.email || mem.phone), // false once contact is provided
+    lastUpdated:         new Date(),
+  };
+
+  try {
+    // Priority: match by email, then phone, then sessionId
+    let existing = null;
+    if (mem.email)  existing = await leadsCol.findOne({ email: mem.email });
+    if (!existing && mem.phone)  existing = await leadsCol.findOne({ phone: mem.phone });
+    if (!existing)  existing = await leadsCol.findOne({ sessionId: session.sessionId });
+
+    if (existing) {
+      // Merge — never overwrite a real value with null
+      const merged = { ...existing };
+      for (const [k, v] of Object.entries(leadData)) {
+        if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) {
+          merged[k] = v;
+        }
+      }
+      merged.lastUpdated = new Date();
+      await leadsCol.replaceOne({ _id: existing._id }, merged);
+      console.log(`✅ Partial lead upserted: ${mem.name || 'no-name'} (session …${session.sessionId.slice(-6)})`);
+    } else {
+      await leadsCol.insertOne({ ...leadData, createdAt: new Date() });
+      console.log(`✅ Partial lead created: ${mem.name || session.sessionId.slice(-6)}`);
+    }
+  } catch (err) {
+    console.error('❌ savePartialLead error:', err.message);
+  }
 }
 
 async function saveLead(session) {
@@ -1073,22 +1106,19 @@ async function saveLead(session) {
     servicesDiscussed:   mem.servicesDiscussed  || [],
     topicsDiscussed:     state.topicsDiscussed  || [],
     conversationSummary: mem.conversationSummary || '',
-    source:              'website',              // FIX: always set source
+    sessionId:           session.sessionId,
+    source:              'website',
+    partial:             false, // has contact info — no longer partial
     lastUpdated:         new Date(),
   };
 
   try {
-    // Try to find existing lead by email OR phone
     let existingLead = null;
-    if (mem.email) {
-      existingLead = await leadsCol.findOne({ email: mem.email });
-    }
-    if (!existingLead && mem.phone) {
-      existingLead = await leadsCol.findOne({ phone: mem.phone });
-    }
+    if (mem.email) existingLead = await leadsCol.findOne({ email: mem.email });
+    if (!existingLead && mem.phone) existingLead = await leadsCol.findOne({ phone: mem.phone });
+    if (!existingLead) existingLead = await leadsCol.findOne({ sessionId: session.sessionId });
 
     if (existingLead) {
-      // FIX: Merge — don't overwrite fields that were already set with null
       const merged = { ...existingLead };
       for (const [k, v] of Object.entries(leadData)) {
         if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) {
@@ -1259,6 +1289,8 @@ app.post('/api/chat', async (req, res) => {
       state.phase = 'onboarding_name';
       const welcome = `Hi there! 👋 Welcome to Comply Globally.\n\nI'm your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?`;
       session.history.push({ role: 'assistant', content: welcome });
+      // Save an anonymous partial lead immediately so even bounces are tracked
+      await savePartialLead(session);
       await saveSession(session);
       return res.json({ reply: welcome, sessionId, menu: null, phase: state.phase });
     }
@@ -1289,30 +1321,72 @@ app.post('/api/chat', async (req, res) => {
       console.log(`📝 Memory updated:`, updates);
     }
 
-    // STEP 2: Name extraction — runs on EVERY message, not just onboarding
-    // FIX: name extraction runs always so late introductions are captured
+    // STEP 2: Name extraction — runs on EVERY message so late introductions are captured
     if (!mem.name) {
       const n = extractName(message);
       if (n) {
         mem.name = n;
         console.log(`✅ Name locked: ${n}`);
-        // If we're still in onboarding_name, advance the phase
+
         if (state.phase === 'new' || state.phase === 'onboarding_name') {
-          advancePhase(session);
+          advancePhase(session); // → onboarding_current_country
+          // Save partial lead with name captured
+          await savePartialLead(session);
           await saveSession(session);
-          const nameReply = `Nice to meet you, ${n}! 🌟\n\nWhich market are you looking to expand into? (e.g., UAE, Singapore, UK, USA, India)`;
+          // NEW: ask current country next, not target country
+          const nameReply = `Nice to meet you, ${n}! 🌟\n\nWhich country are you currently based in? (e.g. India, UAE, USA, UK, Singapore)`;
           session.history.push({ role: 'user',      content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
-          // FIX: save lead right away with the name (even without contact yet)
-          await saveLeadIfPossible(session);
           return res.json({ reply: nameReply, sessionId, menu: null, phase: state.phase });
         }
         // Name captured in advisory phase — update lead record immediately
-        await saveLeadIfPossible(session);
+        await savePartialLead(session);
       }
     }
 
-    // STEP 3: Country extraction (only during onboarding_country)
+    // STEP 2b: Current country extraction (onboarding_current_country phase)
+    if (mem.name && !mem.currentCountry && state.phase === 'onboarding_current_country') {
+      let foundCurrentCountry = null;
+      const lowerMsg = message.toLowerCase();
+
+      for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
+        if (lowerMsg.includes(kw)) {
+          foundCurrentCountry = country;
+          break;
+        }
+      }
+
+      // Handle "I'm from India", "based in UAE", "living in UK" etc.
+      if (!foundCurrentCountry) {
+        const basedMatch = lowerMsg.match(/(?:based in|currently in|i(?:'m| am) in|living in|from|i'm from|i am from)\s+([a-z\s]+?)(?:\s|,|\.|$)/);
+        if (basedMatch) {
+          const place = basedMatch[1].trim();
+          foundCurrentCountry = COUNTRY_MAP[place] || null;
+        }
+      }
+
+      if (foundCurrentCountry) {
+        mem.currentCountry = foundCurrentCountry;
+        console.log(`✅ Current country locked: ${foundCurrentCountry}`);
+        advancePhase(session); // → onboarding_country
+        await savePartialLead(session);
+        await saveSession(session);
+
+        const currentCountryReply = `Got it, ${mem.name}! 🌍\n\nAnd which country or market are you looking to expand into? (e.g. UAE, Singapore, USA, UK, Canada)`;
+        session.history.push({ role: 'user',      content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(currentCountryReply) });
+        return res.json({ reply: currentCountryReply, sessionId, menu: null, phase: state.phase });
+      } else {
+        // Country not recognised — ask again
+        const askAgain = `Which country are you currently based in, ${mem.name}? For example: India, UAE, USA, UK, Singapore, Canada.`;
+        session.history.push({ role: 'user',      content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(askAgain) });
+        await saveSession(session);
+        return res.json({ reply: askAgain, sessionId, menu: null, phase: state.phase });
+      }
+    }
+
+    // STEP 3: Target country extraction (onboarding_country phase)
     if (
       mem.name &&
       !mem.targetCountry &&
@@ -1330,8 +1404,9 @@ app.post('/api/chat', async (req, res) => {
       if (foundCountry) {
         mem.targetCountry   = foundCountry;
         mem.targetCountries = [foundCountry];
-        console.log(`✅ Country locked: ${foundCountry}`);
-        advancePhase(session);
+        console.log(`✅ Target country locked: ${foundCountry}`);
+        advancePhase(session); // → onboarding_contact
+        await savePartialLead(session);
         await saveSession(session);
 
         const countryReply = `Great choice, ${mem.name}! ${foundCountry} is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email or WhatsApp number? Please include the country code for your phone (e.g. +91 98765 43210 for India, +1 415 555 0100 for USA, +971 50 123 4567 for UAE). Our team will use it to send you a custom quote and specific insights for ${foundCountry}.`;
@@ -1339,7 +1414,7 @@ app.post('/api/chat', async (req, res) => {
         session.history.push({ role: 'assistant', content: truncateMsg(countryReply) });
         return res.json({ reply: countryReply, sessionId, menu: null, phase: state.phase });
       } else {
-        const askAgain = `Which market are you looking to expand into, ${mem.name}? For example: UAE, Singapore, UK, USA, or India.`;
+        const askAgain = `Which market are you looking to expand into, ${mem.name}? For example: UAE, Singapore, UK, USA, or Canada.`;
         session.history.push({ role: 'user',      content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(askAgain) });
         await saveSession(session);
@@ -1377,11 +1452,11 @@ app.post('/api/chat', async (req, res) => {
 
     // STEP 4b: Contact received in onboarding_contact — confirm and advance
     if (contactJustReceived && state.phase === 'onboarding_contact') {
-      advancePhase(session);
+      advancePhase(session); // → advisory
 
-      const nameGreet  = mem.name ? `${mem.name}` : 'there';
+      const nameGreet   = mem.name ? `${mem.name}` : 'there';
       const contactType = mem.email ? `email (${mem.email})` : `number (${mem.phone})`;
-      const confirmReply = `Perfect, ${nameGreet}! I've got your ${contactType}. 📧\n\nOur team will be in touch with tailored information about expanding to ${mem.targetCountry}. Now — what aspect of the expansion would you like to explore first?\n\nWant to explore further?\n1️⃣ What does the incorporation process look like in ${mem.targetCountry}?\n2️⃣ What are the banking options available?\n3️⃣ What are the tax implications for my business?\n4️⃣ What compliance requirements should I know about?`;
+      const confirmReply = `Perfect, ${nameGreet}! I've got your ${contactType}. 📧\n\nOur team will be in touch with tailored information about expanding to ${mem.targetCountry || 'your target market'}. Now — what aspect of the expansion would you like to explore first?\n\nWant to explore further?\n1️⃣ What does the incorporation process look like in ${mem.targetCountry || 'your target market'}?\n2️⃣ What are the banking options available?\n3️⃣ What are the tax implications for my business?\n4️⃣ What compliance requirements should I know about?`;
 
       session.history.push({ role: 'user',      content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(confirmReply) });
@@ -1389,7 +1464,7 @@ app.post('/api/chat', async (req, res) => {
       const menu = parseMenuFromReply(confirmReply);
       if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
 
-      // FIX: Save lead with full data including name
+      // Full lead save with contact info
       if (isLeadSaveable(mem)) {
         state.leadSaved = true;
         await saveLead(session);
@@ -1465,14 +1540,17 @@ app.post('/api/chat', async (req, res) => {
 
     await maybeUpdateSummary(session);
 
-    // FIX: Always upsert lead when we have contact — picks up name even if saved earlier without it
+    // Always upsert lead — picks up name, topics, summary even if saved earlier without them
     if (isLeadSaveable(mem)) {
       if (!state.leadSaved) {
         state.leadSaved = true;
         await sendLeadEmail(session);
       }
-      await saveLead(session);       // always upsert (updates name, topics, summary)
+      await saveLead(session);
       await appendToSheet(session);
+    } else {
+      // No contact yet — but still update the partial lead with latest data
+      await savePartialLead(session);
     }
 
     await saveSession(session);
@@ -1497,15 +1575,6 @@ app.post('/api/chat', async (req, res) => {
   }
 });
 
-// Helper — save lead only if we have something useful (even without contact)
-async function saveLeadIfPossible(session) {
-  const { memory: mem } = session;
-  if (isLeadSaveable(mem)) {
-    await saveLead(session);
-  }
-  // If no contact yet, session is still persisted via saveSession — lead will be created when contact arrives
-}
-
 // Backwards compatibility alias
 app.post('/chat', (req, res) => {
   req.url = '/api/chat';
@@ -1522,10 +1591,25 @@ app.get('/health', (req, res) => res.json({
   rateLimitActive: Date.now() < _rateLimitUntil,
 }));
 
+// Returns all leads — including partial ones (no contact yet)
 app.get('/leads', async (req, res) => {
   if (!leadsCol) return res.json([]);
   try {
     const leads = await leadsCol.find({}).sort({ createdAt: -1 }).limit(500).toArray();
+    res.json(leads);
+  } catch (err) { res.json([]); }
+});
+
+// Returns only leads with contact info (email or phone)
+app.get('/leads/complete', async (req, res) => {
+  if (!leadsCol) return res.json([]);
+  try {
+    const leads = await leadsCol.find({
+      $or: [
+        { email: { $ne: null, $exists: true } },
+        { phone: { $ne: null, $exists: true } },
+      ]
+    }).sort({ createdAt: -1 }).limit(500).toArray();
     res.json(leads);
   } catch (err) { res.json([]); }
 });
@@ -1544,6 +1628,7 @@ app.post('/reset/:sessionId', async (req, res) => {
   const id = req.params.sessionId;
   _cache.session.delete(id);
   if (sessionsCol) await sessionsCol.deleteOne({ sessionId: id }).catch(() => {});
+  if (leadsCol)    await leadsCol.deleteOne({ sessionId: id }).catch(() => {});
   res.json({ success: true });
 });
 
@@ -1558,17 +1643,18 @@ app.get('/debug-email', async (req, res) => {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
-// FIX: backfill-names endpoint — re-run name detection on all leads missing a name
+// Backfill — re-run name detection on all leads missing a name
 app.post('/backfill-names', async (req, res) => {
   if (!leadsCol || !sessionsCol) return res.json({ error: 'MongoDB not connected' });
   try {
     const namelessLeads = await leadsCol.find({ $or: [{ name: null }, { name: '' }] }).toArray();
     let updated = 0;
     for (const lead of namelessLeads) {
-      // Try to find the session for this lead
-      const session = lead.email
-        ? await sessionsCol.findOne({ 'memory.email': lead.email })
-        : await sessionsCol.findOne({ 'memory.phone': lead.phone });
+      const session = lead.sessionId
+        ? await sessionsCol.findOne({ sessionId: lead.sessionId })
+        : (lead.email
+            ? await sessionsCol.findOne({ 'memory.email': lead.email })
+            : await sessionsCol.findOne({ 'memory.phone': lead.phone }));
       if (session && session.memory && session.memory.name) {
         await leadsCol.updateOne({ _id: lead._id }, { $set: { name: session.memory.name } });
         updated++;
@@ -1590,10 +1676,11 @@ app.get('/', (req, res) => {
 const PORT = process.env.PORT || 5000;
 connectMongo().then(() => {
   app.listen(PORT, () => {
-    console.log(`\n🚀 Comply Website Bot v2.5 — Validation & Lead Fix Edition`);
+    console.log(`\n🚀 Comply Website Bot v3.0 — Full Onboarding & Partial Lead Capture`);
     console.log(`📡 Port: ${PORT}`);
     console.log(`💬 POST /api/chat`);
-    console.log(`📊 GET  /leads`);
+    console.log(`📊 GET  /leads          (all leads incl. partial)`);
+    console.log(`📊 GET  /leads/complete (only leads with contact info)`);
     console.log(`❤️  GET  /health`);
     console.log(`🔍 GET  /debug/:sessionId`);
     console.log(`🔧 POST /backfill-names\n`);
