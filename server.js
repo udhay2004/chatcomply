@@ -544,20 +544,40 @@ function getPhoneFeedback(reason, name) {
 
 // ─────────────────────────────────────────────
 // CONTACT DETECTION HELPERS
+// detectEmailAttempt: returns the raw email string if found, OR
+//   returns { invalid: true, raw: X } if message looks like an email attempt
+//   but has no @ sign (so caller can reject it cleanly).
 // ─────────────────────────────────────────────
 function detectEmailAttempt(msg) {
   const withoutTimestamp = msg
     .replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '')
     .trim();
 
+  // Standard email with @
   const standardMatch = withoutTimestamp.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/);
   if (standardMatch) return standardMatch[0];
 
+  // "john at gmail dot com"
   const atDotMatch = withoutTimestamp.match(/\b([A-Za-z0-9._%+\-]+)\s+at\s+([A-Za-z0-9]+)\s+dot\s+(com|net|org|co\.in|in)\b/i);
   if (atDotMatch) return `${atDotMatch[1]}@${atDotMatch[2]}.${atDotMatch[3]}`;
 
+  // "john gmail.com" or "john gmail"
   const missingAt = withoutTimestamp.match(/^([A-Za-z0-9._%+\-]+)\s+(gmail|yahoo|hotmail|outlook)(?:\.com)?$/i);
   if (missingAt) return `${missingAt[1]}@${missingAt[2]}.com`;
+
+  // ── CRITICAL FIX: Catch "my email is uuu" / "email: xyz" patterns with NO @ ──
+  // If user says "my email is X" but X has no @, it's a garbled/invalid email attempt.
+  // Return a sentinel so caller can reject it and ask for a proper address.
+  const emailPhraseMatch = withoutTimestamp.match(
+    /(?:my email(?:\s+(?:is|address|id))?|email\s*(?:is|:)|e-?mail\s*(?:is|:))\s*([^\s@,]{2,60})/i
+  );
+  if (emailPhraseMatch) {
+    const candidate = emailPhraseMatch[1].trim();
+    // If it has @, it was already caught above or has a format issue — run through normal path
+    if (candidate.includes('@')) return candidate;
+    // No @ — this is definitely not a valid email
+    return { invalid: true, raw: candidate };
+  }
 
   return null;
 }
@@ -567,16 +587,36 @@ function detectPhoneAttempt(msg) {
     .replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '')
     .trim();
 
+  // Must look primarily like a phone number — not a sentence with words
   const PHONE_RE = /^[\+0]?[\d\s\-().]{7,20}$/;
   if (!PHONE_RE.test(cleaned)) return null;
 
   const digitsOnly = cleaned.replace(/\D/g, '');
+
+  // Must have at least 7 digits to be a phone number
   if (digitsOnly.length < 7 || digitsOnly.length > 15) return null;
 
+  // Reject pure years (4 digits starting with 1 or 2)
   if (digitsOnly.length === 4 && /^[12]/.test(digitsOnly)) return null;
+
+  // Reject currency amounts
   if (cleaned.includes('$') || cleaned.includes('€') || cleaned.includes('₹')) return null;
 
   return cleaned;
+}
+
+// detectPhoneAttemptInSentence: catches "my number is 9422" style messages
+// where the number itself wouldn't pass the strict PHONE_RE above.
+// Returns { raw, digits } or null.
+function detectPhoneInSentence(msg) {
+  const phoneInSentenceMatch = msg.match(
+    /(?:my (?:number|phone|mobile|whatsapp|contact)(?: (?:is|number|no))?|phone\s*(?:is|:)|number\s*(?:is|:)|contact\s*(?:is|:)|reach me at|call me at|whatsapp\s*(?:is|:))\s*([\+\d][\d\s\-().]{3,25})/i
+  );
+  if (!phoneInSentenceMatch) return null;
+  const raw = phoneInSentenceMatch[1].trim();
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 4) return null; // catch even short ones for validation rejection
+  return { raw, digits };
 }
 
 // ─────────────────────────────────────────────
@@ -602,14 +642,24 @@ async function extractEntities(msg, mem) {
 
   // ── Email ──
   if (!mem.email) {
-    const rawEmail = detectEmailAttempt(msg);
-    if (rawEmail) {
-      const emailCheck = await validateEmail(rawEmail);
+    const rawEmailResult = detectEmailAttempt(msg);
+    if (rawEmailResult) {
+      // Sentinel: user said "my email is X" but X has no @ sign
+      if (typeof rawEmailResult === 'object' && rawEmailResult.invalid) {
+        console.log(\`❌ Email attempt with no @ sign: "\${rawEmailResult.raw}"\`);
+        validationError = {
+          type: 'email',
+          message: getEmailFeedback('format', mem.name),
+        };
+        return { updates, validationError };
+      }
+      // Normal string — run full validation
+      const emailCheck = await validateEmail(rawEmailResult);
       if (emailCheck.valid) {
-        updates.email = emailCheck.cleaned || rawEmail.trim().toLowerCase();
-        console.log(`✅ Email validated: ${updates.email}`);
+        updates.email = emailCheck.cleaned || rawEmailResult.trim().toLowerCase();
+        console.log(\`✅ Email validated: \${updates.email}\`);
       } else {
-        console.log(`❌ Email rejected (${emailCheck.reason}): ${rawEmail}`);
+        console.log(\`❌ Email rejected (\${emailCheck.reason}): \${rawEmailResult}\`);
         validationError = {
           type: 'email',
           message: getEmailFeedback(emailCheck.reason, mem.name),
@@ -621,14 +671,20 @@ async function extractEntities(msg, mem) {
 
   // ── Phone ──
   if (!mem.phone && !validationError) {
-    const rawPhone = detectPhoneAttempt(msg);
+    // First try strict bare-number detection (e.g. user types "+91 98765 43210")
+    let rawPhone = detectPhoneAttempt(msg);
+    // If that misses, try sentence-style ("my number is 9422")
+    if (!rawPhone) {
+      const sentencePhone = detectPhoneInSentence(msg);
+      if (sentencePhone) rawPhone = sentencePhone.raw;
+    }
     if (rawPhone) {
       const phoneCheck = validatePhone(rawPhone, mem.currentCountry);
       if (phoneCheck.valid) {
         updates.phone = phoneCheck.cleaned;
-        console.log(`✅ Phone validated: ${updates.phone}`);
+        console.log(\`✅ Phone validated: \${updates.phone}\`);
       } else {
-        console.log(`❌ Phone rejected (${phoneCheck.reason}): ${rawPhone}`);
+        console.log(\`❌ Phone rejected (\${phoneCheck.reason}): \${rawPhone}\`);
         validationError = {
           type: 'phone',
           message: getPhoneFeedback(phoneCheck.reason, mem.name),
