@@ -203,13 +203,8 @@ async function saveSession(s) {
 
 // ─────────────────────────────────────────────
 // COUNTRY MAP
-// FIX: longer/more-specific keys MUST come before shorter substring keys so
-// "south africa" is matched before "africa", "south korea" before "korea", etc.
-// Object.keys() preserves insertion order in modern JS engines, and the
-// extraction loops break on first match — so order here is critical.
 // ─────────────────────────────────────────────
 const COUNTRY_MAP = {
-  // ── Specific entries that must precede their substrings ──
   'south africa':   'South Africa',
   'south korea':    'South Korea',
   'north korea':    'North Korea',
@@ -223,8 +218,6 @@ const COUNTRY_MAP = {
   'puerto rico':    'Puerto Rico',
   'sri lanka':      'Sri Lanka',
   'el salvador':    'El Salvador',
-
-  // ── Regular entries ──
   'uae':         'UAE',
   'dubai':       'UAE',
   'sharjah':     'UAE',
@@ -286,8 +279,14 @@ const COUNTRY_MAP = {
   'tunisia':     'Tunisia',
   'algeria':     'Algeria',
   'libya':       'Libya',
-
-  // ── Regions (must come AFTER all country-specific entries) ──
+  'venezuela':   'Venezuela',
+  'colombia':    'Colombia',
+  'peru':        'Peru',
+  'chile':       'Chile',
+  'ecuador':     'Ecuador',
+  'bolivia':     'Bolivia',
+  'paraguay':    'Paraguay',
+  'uruguay':     'Uruguay',
   'europe': 'Europe',
   'africa': 'Africa',
   'asia':   'Asia',
@@ -346,8 +345,6 @@ function extractName(msg) {
   if (/(punjabi|gujarati|marathi|bengali|tamil|telugu|sikh|hindu|muslim|christian|fan|lover|into|obsessed|huge)/i.test(lower)) return null;
   if (CORPORATE_SUFFIX_RE.test(t)) return null;
   if (/\d/.test(t)) return null;
-
-  // Don't try to extract a name from messages that contain email/phone content
   if (/@/.test(t) || /my mail|my email|my number|my phone|whatsapp/i.test(lower)) return null;
 
   const intro = t.match(NAME_INTRO_RE);
@@ -380,23 +377,14 @@ function stripHallucinatedName(reply, knownName) {
 // ─────────────────────────────────────────────
 // EMAIL EXTRACTION & VALIDATION
 // ─────────────────────────────────────────────
-
 function extractEmailFromText(msg) {
   const text = msg.trim();
-
-  // 1. Standard email in text (highest confidence)
   const stdMatch = text.match(/\b([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\b/);
   if (stdMatch) return stdMatch[1];
-
-  // 2. "username at domain dot com" spelling
   const atDotMatch = text.match(/\b([A-Za-z0-9._%+\-]+)\s+at\s+([A-Za-z0-9]+)\s+dot\s+(com|net|org|co\.in|in|io)\b/i);
   if (atDotMatch) return atDotMatch[1] + '@' + atDotMatch[2] + '.' + atDotMatch[3];
-
-  // 3. "username gmail/yahoo/hotmail/outlook" (missing @)
   const missingAt = text.match(/\b([A-Za-z0-9._%+\-]+)\s+(gmail|yahoo|hotmail|outlook)(?:\.com)?\b/i);
   if (missingAt) return missingAt[1] + '@' + missingAt[2].toLowerCase() + '.com';
-
-  // 4. "my mail/email is <something>" — phrase-based
   const phraseMatch = text.match(/(?:my (?:mail|email)(?:\s+(?:is|address|id))?|email\s*(?:is|:)|e-?mail\s*(?:is|:))\s*([^\s,;]{3,80})/i);
   if (phraseMatch) {
     const candidate = phraseMatch[1].trim().toLowerCase();
@@ -405,7 +393,6 @@ function extractEmailFromText(msg) {
     if (providerMatch) return providerMatch[1] + '@' + providerMatch[2].toLowerCase() + '.com';
     return { incomplete: true, raw: candidate };
   }
-
   return null;
 }
 
@@ -431,17 +418,13 @@ function preCleanEmail(rawText) {
 async function validateEmail(rawInput, options) {
   options = options || { skipDNS: false };
   if (!rawInput || typeof rawInput !== 'string') return { valid: false, reason: 'empty' };
-
   const preCleaned = preCleanEmail(rawInput.trim().toLowerCase());
   const trimmed = (preCleaned.cleaned && preCleaned.hadTypo) ? preCleaned.cleaned : rawInput.trim().toLowerCase();
   if (preCleaned.hadTypo) console.log('🔧 Auto-fixed email: "' + rawInput.trim() + '" to "' + trimmed + '"');
-
   const FORMAT_RE = /^[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}$/;
   if (!FORMAT_RE.test(trimmed)) return { valid: false, reason: 'format', attempted: rawInput.trim() };
-
   const TYPO_TLDS = ['.cmo','.cim','.con','.cpm','.ocm','.kom','.conm','.coom','.gmal','.gmial','.yaho','.yhaoo','.gamil','.gmaill','.cm','.om'];
   if (TYPO_TLDS.some(function(t) { return trimmed.endsWith(t); })) return { valid: false, reason: 'typo_tld', attempted: trimmed };
-
   const domain = trimmed.split('@')[1];
   const FAKE_DOMAINS = new Set([
     'test.com','example.com','example.org','example.net','fake.com','noemail.com','noreply.com',
@@ -450,7 +433,6 @@ async function validateEmail(rawInput, options) {
     'dispostable.com','maildrop.cc','mailnull.com','test.in',
   ]);
   if (FAKE_DOMAINS.has(domain)) return { valid: false, reason: 'fake_domain', attempted: trimmed };
-
   if (!options.skipDNS) {
     try {
       const controller = new AbortController();
@@ -468,108 +450,25 @@ async function validateEmail(rawInput, options) {
 
 // ─────────────────────────────────────────────
 // PHONE VALIDATION
-// FIX: Added per-country-code local digit length table so numbers like
-// +66 8329832 (7 local digits, Thailand needs 9) are correctly rejected.
-// Sources: ITU-T E.164 / national numbering plans.
 // ─────────────────────────────────────────────
-
-// Map of country calling code (string, no +) → expected local digit count(s).
-// A single number means exact length; an array means [min, max].
 const CC_LOCAL_DIGITS = {
-  // Asia-Pacific
-  '91':  10,          // India
-  '92':  10,          // Pakistan
-  '93':  9,           // Afghanistan
-  '94':  9,           // Sri Lanka
-  '95':  [8, 9],      // Myanmar
-  '60':  [9, 10],     // Malaysia
-  '62':  [9, 12],     // Indonesia
-  '63':  10,          // Philippines
-  '64':  [8, 10],     // New Zealand
-  '65':  8,           // Singapore
-  '66':  9,           // Thailand
-  '81':  [10, 11],    // Japan
-  '82':  [9, 10],     // South Korea
-  '84':  9,           // Vietnam
-  '86':  11,          // China
-  '852': 8,           // Hong Kong
-  '853': 8,           // Macau
-  '855': 9,           // Cambodia
-  '856': 10,          // Laos
-  '880': 10,          // Bangladesh
-  '977': 10,          // Nepal
-  '886': [9, 10],     // Taiwan
-  // Middle East
-  '971': 9,           // UAE
-  '966': 9,           // Saudi Arabia
-  '974': 8,           // Qatar
-  '973': 8,           // Bahrain
-  '968': 8,           // Oman
-  '962': 9,           // Jordan
-  '961': [7, 8],      // Lebanon
-  '964': 10,          // Iraq
-  '965': 8,           // Kuwait
-  '972': [8, 9],      // Israel
-  // Europe
-  '1':   10,          // USA / Canada
-  '7':   10,          // Russia / Kazakhstan
-  '20':  10,          // Egypt
-  '27':  9,           // South Africa
-  '30':  10,          // Greece
-  '31':  9,           // Netherlands
-  '32':  9,           // Belgium
-  '33':  9,           // France
-  '34':  9,           // Spain
-  '36':  9,           // Hungary
-  '39':  [9, 11],     // Italy
-  '40':  10,          // Romania
-  '41':  9,           // Switzerland
-  '43':  [10, 13],    // Austria
-  '44':  10,          // UK
-  '45':  8,           // Denmark
-  '46':  [9, 10],     // Sweden
-  '47':  8,           // Norway
-  '48':  9,           // Poland
-  '49':  [10, 11],    // Germany
-  '51':  9,           // Peru
-  '52':  10,          // Mexico
-  '54':  10,          // Argentina
-  '55':  11,          // Brazil
-  '56':  9,           // Chile
-  '57':  10,          // Colombia
-  '58':  10,          // Venezuela
-  '61':  9,           // Australia
-  '90':  10,          // Turkey
-  '98':  10,          // Iran
-  // Africa
-  '212': 9,           // Morocco
-  '213': 9,           // Algeria
-  '216': 8,           // Tunisia
-  '218': 9,           // Libya
-  '221': 9,           // Senegal
-  '233': 9,           // Ghana
-  '234': 10,          // Nigeria
-  '237': 9,           // Cameroon
-  '254': 9,           // Kenya
-  '255': 9,           // Tanzania
-  '256': 9,           // Uganda
-  '260': 9,           // Zambia
-  '263': 9,           // Zimbabwe
-  '264': 9,           // Namibia
-  '265': 9,           // Malawi
-  '266': 8,           // Lesotho
-  '267': 8,           // Botswana
-  '250': 9,           // Rwanda
-  '251': 9,           // Ethiopia
-  '252': [7, 8],      // Somalia
-  '258': 9,           // Mozambique
-  '225': 8,           // Ivory Coast
-  // Estonia and others
-  '372': [7, 8],      // Estonia
+  '91':  10, '92':  10, '93':  9,  '94':  9,  '95':  [8, 9],
+  '60':  [9, 10], '62':  [9, 12], '63':  10, '64':  [8, 10], '65':  8,
+  '66':  9,  '81':  [10, 11], '82':  [9, 10], '84':  9,  '86':  11,
+  '852': 8,  '853': 8,  '855': 9,  '856': 10, '880': 10, '977': 10, '886': [9, 10],
+  '971': 9,  '966': 9,  '974': 8,  '973': 8,  '968': 8,  '962': 9,
+  '961': [7, 8], '964': 10, '965': 8,  '972': [8, 9],
+  '1':   10, '7':   10, '20':  10, '27':  9,  '30':  10, '31':  9,
+  '32':  9,  '33':  9,  '34':  9,  '36':  9,  '39':  [9, 11], '40':  10,
+  '41':  9,  '43':  [10, 13], '44':  10, '45':  8,  '46':  [9, 10],
+  '47':  8,  '48':  9,  '49':  [10, 11], '51':  9,  '52':  10, '54':  10,
+  '55':  11, '56':  9,  '57':  10, '58':  10, '61':  9,  '90':  10, '98':  10,
+  '212': 9,  '213': 9,  '216': 8,  '218': 9,  '221': 9,  '233': 9,
+  '234': 10, '237': 9,  '254': 9,  '255': 9,  '256': 9,  '260': 9,
+  '263': 9,  '264': 9,  '265': 9,  '266': 8,  '267': 8,  '250': 9,
+  '251': 9,  '252': [7, 8], '258': 9, '225': 8, '372': [7, 8],
 };
 
-// Resolve the calling code from a digit string (no leading +)
-// Tries 3-digit prefix, then 2-digit, then 1-digit
 function resolveCallingCode(digits) {
   for (const len of [3, 2, 1]) {
     const cc = digits.slice(0, len);
@@ -580,42 +479,31 @@ function resolveCallingCode(digits) {
 
 function validatePhone(rawPhone, currentCountry) {
   if (!rawPhone) return { valid: false, reason: 'empty', cleaned: null };
-
   const stripped   = rawPhone.trim();
   const hasPlus    = stripped.startsWith('+');
   const digitsOnly = stripped.replace(/\D/g, '');
-
   if (!digitsOnly || !/^\d+$/.test(digitsOnly)) return { valid: false, reason: 'format', cleaned: null };
-
-  // ── INDIA CONTEXT ──
   const isIndiaContext =
     stripped.startsWith('+91') ||
     stripped.startsWith('091') ||
     (digitsOnly.startsWith('91') && digitsOnly.length === 12) ||
     (currentCountry === 'India' && !hasPlus && digitsOnly.length === 10);
-
   if (isIndiaContext) {
     let local = digitsOnly;
     if (local.startsWith('091') && local.length === 13) local = local.slice(3);
     else if (local.startsWith('91') && local.length === 12) local = local.slice(2);
     else if (local.startsWith('0')  && local.length === 11) local = local.slice(1);
-
     if (local.length < 10) return { valid: false, reason: 'too_short_india',  cleaned: null };
     if (local.length > 10) return { valid: false, reason: 'too_long_india',   cleaned: null };
     if (!/^[6-9]/.test(local))  return { valid: false, reason: 'invalid_india_prefix', cleaned: null };
     if (/^(.)\1{9}$/.test(local)) return { valid: false, reason: 'placeholder', cleaned: null };
     if (local === '1234567890' || local === '0123456789') return { valid: false, reason: 'placeholder', cleaned: null };
-
     return { valid: true, reason: null, cleaned: '+91' + local };
   }
-
-  // ── INTERNATIONAL (with + prefix) — validate local digit count by country code ──
   if (hasPlus) {
     if (digitsOnly.length < 7)  return { valid: false, reason: 'too_short', cleaned: null };
     if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',  cleaned: null };
     if (/^(.)\1{7,}$/.test(digitsOnly)) return { valid: false, reason: 'placeholder', cleaned: null };
-
-    // Check local digit count against country code table
     const cc = resolveCallingCode(digitsOnly);
     if (cc) {
       const localDigits = digitsOnly.slice(cc.length);
@@ -628,16 +516,12 @@ function validatePhone(rawPhone, currentCountry) {
         if (localDigits.length > rule[1]) return { valid: false, reason: 'too_long',  cleaned: null };
       }
     }
-
     return { valid: true, reason: null, cleaned: '+' + digitsOnly };
   }
-
-  // ── NO COUNTRY CODE ──
   if (digitsOnly.length === 10 && /^[2-9]/.test(digitsOnly)) return { valid: false, reason: 'missing_country_code', cleaned: null };
   if (digitsOnly.length < 8)  return { valid: false, reason: 'too_short', cleaned: null };
   if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',  cleaned: null };
   if (/^(.)\1+$/.test(digitsOnly)) return { valid: false, reason: 'placeholder', cleaned: null };
-
   return { valid: true, reason: null, cleaned: '+' + digitsOnly };
 }
 
@@ -673,23 +557,17 @@ function getPhoneFeedback(reason, name) {
 // ─────────────────────────────────────────────
 function extractPhoneFromText(msg) {
   const text = msg.trim();
-
-  // 1. Phrase-based: "number is X", "phone is X", "call me at X", etc.
   const phraseMatch = text.match(/(?:(?:my\s+)?(?:number|phone|mobile|whatsapp|contact)(?:\s+(?:is|no|number))?|call\s+me\s+at|reach\s+me\s+at|whatsapp\s*(?:is|:))\s*([\+\d][\d\s\-().]{3,25})/i);
   if (phraseMatch) {
     const raw = phraseMatch[1].trim();
     const digits = raw.replace(/\D/g, '');
     if (digits.length >= 7 && digits.length <= 15) return raw;
   }
-
-  // 2. Bare phone number — only if message looks purely like a phone (nothing else textual)
   const bare = text.replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM)/gi, '').trim();
   if (/^[\+0]?[\d\s\-().]{7,25}$/.test(bare)) {
     const digits = bare.replace(/\D/g, '');
     if (digits.length >= 7 && digits.length <= 15) return bare;
   }
-
-  // 3. Look for phone-like token in mixed messages (e.g. "mail is foo@bar.com and number is +18489393")
   const phoneTokens = text.match(/[\+][\d\s\-().]{6,20}|\b\d{7,15}\b/g);
   if (phoneTokens) {
     const intl = phoneTokens.find(function(t) { return t.startsWith('+'); });
@@ -699,7 +577,6 @@ function extractPhoneFromText(msg) {
       if (digits.length >= 7 && digits.length <= 15) return t.trim();
     }
   }
-
   return null;
 }
 
@@ -742,7 +619,7 @@ async function extractEntities(msg, mem, phase) {
     }
   }
 
-  // ── PHONE — always run, independent of email result ──
+  // ── PHONE ──
   if (!mem.phone) {
     const rawPhone = extractPhoneFromText(msg);
     if (rawPhone) {
@@ -763,7 +640,6 @@ async function extractEntities(msg, mem, phase) {
     }
   }
 
-  // ── RESOLVE: return only highest-priority error if no contact captured ──
   let validationError = null;
   if (validationErrors.length > 0 && !updates.email && !updates.phone) {
     validationErrors.sort(function(a, b) { return a.priority - b.priority; });
@@ -779,10 +655,10 @@ async function extractEntities(msg, mem, phase) {
     }
   }
 
-  // ── TARGET COUNTRIES — iterate longest keys first (COUNTRY_MAP is ordered) ──
-  // Skip during onboarding_current_country: a short reply like "Thailand" is the user's
-  // base country, not their target market. Setting targetCountry here causes
-  // currentCountry === targetCountry in the lead record.
+  // ── TARGET COUNTRIES ──
+  // CRITICAL FIX: Skip if phase is onboarding_current_country.
+  // Also skip if the only country found matches the user's current (base) country —
+  // that means the user is describing where they ARE, not where they want to expand.
   if (!validationError && !NEGATION_RE.test(lower) && phase !== 'onboarding_current_country') {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
@@ -790,6 +666,13 @@ async function extractEntities(msg, mem, phase) {
       const isShortReply = lower.trim().length <= 40;
       if (hasCountry && (hasExpandIntent || isShortReply)) {
         const country  = COUNTRY_MAP[kw];
+        // FIX: Do NOT store a country as targetCountry if it matches the user's
+        // known current/base country and there is no explicit expansion intent.
+        // This prevents "India" from getting stored as both currentCountry AND targetCountry.
+        if (country === mem.currentCountry && !hasExpandIntent) {
+          console.log('⏭️ Skipping targetCountry update — "' + country + '" matches currentCountry and no expand intent');
+          break;
+        }
         const existing = mem.targetCountries || [];
         if (!existing.includes(country)) {
           updates.targetCountries = existing.concat([country]);
@@ -1113,12 +996,94 @@ function checkMemoryRecall(msg, session) {
 }
 
 // ─────────────────────────────────────────────
+// SUMMARY-BASED LEAD ENRICHMENT  ← NEW
+// Called after a summary is generated whenever key fields are still missing.
+// Uses a fast Haiku call to parse name / targetCountry / serviceNeeded
+// from the free-text summary. Only fills nulls — never overwrites real data.
+// ─────────────────────────────────────────────
+async function enrichLeadFromSummary(session) {
+  const mem = session.memory;
+  const summary = mem.conversationSummary;
+  if (!summary || summary.length < 20) return;
+
+  // Only run if at least one key field is missing
+  const needsName    = !mem.name;
+  const needsTarget  = !mem.targetCountry && (!mem.targetCountries || mem.targetCountries.length === 0);
+  const needsService = !mem.serviceNeeded && (!mem.servicesDiscussed || mem.servicesDiscussed.length === 0);
+  if (!needsName && !needsTarget && !needsService) return;
+
+  console.log('🔍 Enriching lead from summary — missing:', [needsName && 'name', needsTarget && 'targetCountry', needsService && 'service'].filter(Boolean).join(', '));
+
+  try {
+    const prompt = `Extract the following fields from this conversation summary. Return ONLY valid JSON, no explanation, no markdown.
+
+Fields to extract:
+- name: the person's first name or full name (string or null)
+- targetCountry: the country they want to expand/incorporate into (string or null — use the canonical English country name)
+- serviceNeeded: one of "Incorporation", "Banking", "Taxation", "FEMA/ODI", "Residency", "Compliance", "Fundraising" or null
+
+Summary:
+"${summary}"
+
+Respond with ONLY this JSON (no backticks, no preamble):
+{"name":null,"targetCountry":null,"serviceNeeded":null}`;
+
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001', max_tokens: 120,
+        messages: [{ role: 'user', content: prompt }],
+      }),
+    });
+    const data = await resp.json();
+    const raw  = ((data.content && data.content[0] && data.content[0].text) || '').trim();
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    let changed = false;
+
+    if (needsName && parsed.name && typeof parsed.name === 'string' && parsed.name.length >= 2) {
+      mem.name = parsed.name;
+      console.log('✅ Enriched name from summary: ' + mem.name);
+      changed = true;
+    }
+
+    if (needsTarget && parsed.targetCountry && typeof parsed.targetCountry === 'string') {
+      // Validate it's a real country we know, or just trust the model
+      const canonical = COUNTRY_MAP[parsed.targetCountry.toLowerCase()] || parsed.targetCountry;
+      // Don't set targetCountry if it matches currentCountry (the base country confusion bug)
+      if (canonical !== mem.currentCountry) {
+        mem.targetCountry   = canonical;
+        mem.targetCountries = [canonical];
+        console.log('✅ Enriched targetCountry from summary: ' + canonical);
+        changed = true;
+      } else {
+        console.log('⏭️ Enrichment: extracted targetCountry "' + canonical + '" matches currentCountry — skipping');
+      }
+    }
+
+    if (needsService && parsed.serviceNeeded && typeof parsed.serviceNeeded === 'string') {
+      const validServices = ['Incorporation','Banking','Taxation','FEMA/ODI','Residency','Compliance','Fundraising'];
+      if (validServices.includes(parsed.serviceNeeded)) {
+        mem.serviceNeeded    = parsed.serviceNeeded;
+        mem.servicesDiscussed = [parsed.serviceNeeded];
+        console.log('✅ Enriched serviceNeeded from summary: ' + parsed.serviceNeeded);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      cSet(session.sessionId, session); // refresh cache with enriched data
+    }
+  } catch (err) {
+    console.warn('⚠️ enrichLeadFromSummary failed:', err.message);
+    // Non-fatal — we just skip enrichment
+  }
+}
+
+// ─────────────────────────────────────────────
 // LEAD PERSISTENCE
-// FIX: Always re-read mem.name at save time so the lead record is never
-// written with name=null when the name is already captured in session memory.
-// The root cause was that some code paths called saveLeadData before the
-// name update was merged into mem; the fix is an explicit re-read here
-// rather than relying on call-site ordering.
 // ─────────────────────────────────────────────
 function isLeadSaveable(mem) {
   return !!(mem.email || mem.phone);
@@ -1132,9 +1097,6 @@ async function saveLeadData(session, isComplete) {
   }
   const mem   = session.memory;
   const state = session.state;
-
-  // FIX: Re-read name directly from session.memory to guard against stale
-  // references in callers that snapshot mem before the name was merged.
   const currentName = session.memory.name || null;
 
   if (!currentName && !mem.email && !mem.phone) {
@@ -1142,16 +1104,33 @@ async function saveLeadData(session, isComplete) {
     return;
   }
 
+  // ── ENRICHMENT PASS ──────────────────────────────────────────────────────
+  // Before writing to DB, attempt to fill any missing fields from the summary.
+  // This is the safety net that catches cases where live extraction missed
+  // the name or target country (e.g. Irene/Venezuela scenario).
+  await enrichLeadFromSummary(session);
+  // Re-read after enrichment (enrichLeadFromSummary mutates session.memory directly)
+  const enrichedName          = session.memory.name          || null;
+  const enrichedTargetCountry = session.memory.targetCountry || null;
+  const enrichedTargetCountries = session.memory.targetCountries && session.memory.targetCountries.length
+    ? session.memory.targetCountries
+    : (enrichedTargetCountry ? [enrichedTargetCountry] : []);
+  const enrichedServiceNeeded   = session.memory.serviceNeeded   || null;
+  const enrichedServicesDiscussed = session.memory.servicesDiscussed && session.memory.servicesDiscussed.length
+    ? session.memory.servicesDiscussed
+    : (enrichedServiceNeeded ? [enrichedServiceNeeded] : []);
+  // ─────────────────────────────────────────────────────────────────────────
+
   const leadData = {
-    name:                currentName,                          // FIX: always current
+    name:                enrichedName,
     email:               mem.email              || null,
     phone:               mem.phone              || null,
     companyName:         mem.companyName        || null,
     currentCountry:      mem.currentCountry     || null,
-    targetCountry:       mem.targetCountry      || null,
-    targetCountries:     mem.targetCountries    || [],
-    serviceNeeded:       mem.serviceNeeded      || null,
-    servicesDiscussed:   mem.servicesDiscussed  || [],
+    targetCountry:       enrichedTargetCountry,
+    targetCountries:     enrichedTargetCountries,
+    serviceNeeded:       enrichedServiceNeeded,
+    servicesDiscussed:   enrichedServicesDiscussed,
     topicsDiscussed:     state.topicsDiscussed  || [],
     conversationSummary: mem.conversationSummary || '',
     sessionId:           session.sessionId,
@@ -1170,8 +1149,6 @@ async function saveLeadData(session, isComplete) {
       const merged = Object.assign({}, existing);
       for (const k of Object.keys(leadData)) {
         const v = leadData[k];
-        // FIX: For name specifically, always overwrite if we now have a value,
-        // even if the stored record already has a (possibly stale null) value.
         if (k === 'name') {
           if (v !== null && v !== undefined) merged[k] = v;
         } else if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) {
@@ -1180,10 +1157,10 @@ async function saveLeadData(session, isComplete) {
       }
       merged.lastUpdated = new Date();
       await leadsCol.replaceOne({ _id: existing._id }, merged);
-      console.log('✅ Lead upserted: ' + (currentName || 'no-name') + ' | ' + (mem.email || mem.phone || session.sessionId.slice(-6)));
+      console.log('✅ Lead upserted: ' + (enrichedName || 'no-name') + ' | ' + (mem.email || mem.phone || session.sessionId.slice(-6)));
     } else {
       await leadsCol.insertOne(Object.assign({}, leadData, { createdAt: new Date() }));
-      console.log('✅ Lead created: ' + (currentName || session.sessionId.slice(-6)));
+      console.log('✅ Lead created: ' + (enrichedName || session.sessionId.slice(-6)));
     }
   } catch (err) {
     console.error('❌ saveLeadData error:', err.message);
@@ -1248,11 +1225,8 @@ async function sendLeadEmail(session) {
 // ─────────────────────────────────────────────
 async function maybeUpdateSummary(session, force) {
   const userMsgCount = session.history.filter(function(m) { return m.role === 'user'; }).length;
-  // Always generate summary when contact is first captured (force=true),
-  // otherwise generate every 5 user messages. This ensures short sessions
-  // (which end at 4-5 messages) always get a summary written to the lead.
   if (!force && (userMsgCount === 0 || userMsgCount % 5 !== 0)) return;
-  if (userMsgCount < 2) return; // need at least 2 messages to summarise
+  if (userMsgCount < 2) return;
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -1267,7 +1241,6 @@ async function maybeUpdateSummary(session, force) {
     if (summary) {
       session.memory.conversationSummary = summary;
       console.log('📝 Summary updated:', summary.substring(0, 80));
-      // Write summary back to lead record immediately so it isn't lost
       if (session.memory.email || session.memory.phone || session.memory.name) {
         await saveLeadData(session, !!(session.memory.email || session.memory.phone));
       }
@@ -1341,7 +1314,7 @@ app.post('/api/chat', async function(req, res) {
     if (!mem.name) {
       const n = extractName(message);
       if (n) {
-        mem.name = n;  // merge into mem FIRST, then save
+        mem.name = n;
         console.log('✅ Name locked: ' + n);
 
         if (state.phase === 'new' || state.phase === 'onboarding_name') {
@@ -1350,10 +1323,9 @@ app.post('/api/chat', async function(req, res) {
           session.history.push({ role: 'user', content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
           await saveSession(session);
-          await saveLeadData(session, false);  // name is already in mem now
+          await saveLeadData(session, false);
           return res.json({ reply: nameReply, sessionId: sessionId, menu: null, phase: state.phase });
         }
-        // Name captured during advisory — update lead
         await saveLeadData(session, isLeadSaveable(mem));
       }
     }
@@ -1394,10 +1366,19 @@ app.post('/api/chat', async function(req, res) {
     if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
       let foundCountry = null;
       const lowerMsg = message.toLowerCase().trim();
-      // FIX: iterate COUNTRY_MAP keys in insertion order (longest/most-specific first)
       for (const kw of Object.keys(COUNTRY_MAP)) {
         if (lowerMsg.includes(kw)) { foundCountry = COUNTRY_MAP[kw]; break; }
       }
+
+      // ── FIX: If user types their own base country as the target, prompt again ──
+      if (foundCountry && foundCountry === mem.currentCountry) {
+        const r = 'It looks like ' + foundCountry + ' is where you\'re currently based, ' + mem.name + '. Which country are you looking to *expand into*? For example: UAE, Singapore, USA, UK, Canada, or another market.';
+        session.history.push({ role: 'user', content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(r) });
+        await saveSession(session);
+        return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
+      }
+
       if (foundCountry) {
         mem.targetCountry   = foundCountry;
         mem.targetCountries = [foundCountry];
@@ -1453,7 +1434,6 @@ app.post('/api/chat', async function(req, res) {
       if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
       state.leadSaved = true;
       await saveSession(session);
-      // Force summary now — this is the most complete snapshot of the session
       await maybeUpdateSummary(session, true);
       await saveLeadData(session, true);
       await appendToSheet(session);
@@ -1606,6 +1586,74 @@ app.post('/backfill-names', async function(req, res) {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
+// ─────────────────────────────────────────────
+// BACKFILL ENDPOINT — re-enrich existing leads from their summary  ← NEW
+// POST /backfill-enrich
+// Iterates all leads where name or targetCountry is missing,
+// pulls the matching session, and runs enrichLeadFromSummary() on it.
+// Safe to run multiple times — only fills nulls, never overwrites.
+// ─────────────────────────────────────────────
+app.post('/backfill-enrich', async function(req, res) {
+  const ready = await ensureMongo();
+  if (!ready || !leadsCol || !sessionsCol) return res.json({ error: 'MongoDB not connected' });
+  try {
+    const stalLeads = await leadsCol.find({
+      $or: [
+        { name: null }, { name: '' },
+        { targetCountry: null }, { targetCountry: '' },
+      ]
+    }).toArray();
+
+    let enriched = 0;
+    for (const lead of stalLeads) {
+      let sessionDoc = null;
+      if (lead.sessionId) sessionDoc = await sessionsCol.findOne({ sessionId: lead.sessionId });
+      if (!sessionDoc) continue;
+
+      // Rebuild a minimal session object that enrichLeadFromSummary can work with
+      const fakeSession = {
+        sessionId: lead.sessionId,
+        memory: Object.assign({
+          name: null, targetCountry: null, targetCountries: [],
+          currentCountry: null, serviceNeeded: null, servicesDiscussed: [],
+          email: null, phone: null, companyName: null, conversationSummary: '',
+        }, sessionDoc.memory || {}),
+        state: sessionDoc.state || {},
+        history: sessionDoc.history || [],
+      };
+
+      const beforeName   = fakeSession.memory.name;
+      const beforeTarget = fakeSession.memory.targetCountry;
+
+      await enrichLeadFromSummary(fakeSession);
+
+      const changedName   = fakeSession.memory.name !== beforeName;
+      const changedTarget = fakeSession.memory.targetCountry !== beforeTarget;
+
+      if (changedName || changedTarget) {
+        const updateFields = { lastUpdated: new Date() };
+        if (changedName)   updateFields.name          = fakeSession.memory.name;
+        if (changedTarget) {
+          updateFields.targetCountry   = fakeSession.memory.targetCountry;
+          updateFields.targetCountries = fakeSession.memory.targetCountries;
+        }
+        if (fakeSession.memory.serviceNeeded && !lead.serviceNeeded) {
+          updateFields.serviceNeeded    = fakeSession.memory.serviceNeeded;
+          updateFields.servicesDiscussed = fakeSession.memory.servicesDiscussed;
+        }
+        await leadsCol.updateOne({ _id: lead._id }, { $set: updateFields });
+        enriched++;
+        console.log('🔧 Backfill-enriched lead: ' + (updateFields.name || lead.email || lead.phone || lead.sessionId.slice(-6)));
+      }
+    }
+
+    res.json({ success: true, checked: stalLeads.length, enriched: enriched });
+  } catch (err) {
+    console.error('❌ /backfill-enrich error:', err.message);
+    res.json({ success: false, error: err.message });
+  }
+});
+
 app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'index.html')); });
 
 // ─────────────────────────────────────────────
@@ -1614,7 +1662,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.4 — Name/country/phone validation fixes');
+    console.log('\n🚀 Comply Website Bot v3.5 — Summary-based lead enrichment + target country fix');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
@@ -1622,7 +1670,8 @@ connectMongo().then(function() {
     console.log('📊 GET  /leads/complete');
     console.log('❤️  GET  /health');
     console.log('🔍 GET  /debug/:sessionId');
-    console.log('🔧 POST /backfill-names\n');
+    console.log('🔧 POST /backfill-names');
+    console.log('🔧 POST /backfill-enrich\n');
     startKeepAlive();
   });
 });
