@@ -546,16 +546,6 @@ async function extractEntities(msg, mem) {
       }
     }
   }
-
-  // Company name
-  if (!mem.companyName && !validationError) {
-    const companyMatch = msg.match(/(?:my company(?:\s+is)?|our company(?:\s+is)?|company name(?:\s+is)?|company:|firm:)\s+([A-Za-z0-9\s&.,'\-]{2,40}?)(?:\s*[,.]|$)/i);
-    if (companyMatch) {
-      const candidate = companyMatch[1].trim();
-      if (candidate.length >= 2 && !NAME_BLACKLIST.has(candidate.toLowerCase())) updates.companyName = candidate;
-    }
-  }
-
   // Target countries
   // Target countries — FIX 3: short replies (e.g. just "UAE") don't need expand intent
   if (!validationError && !NEGATION_RE.test(lower)) {
