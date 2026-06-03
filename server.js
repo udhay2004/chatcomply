@@ -254,6 +254,15 @@ const NAME_BLACKLIST = new Set([
   'october','november','december','yesterday','today','tomorrow',
   'smelly','random','test','dummy','fake','sample','unknown','anonymous',
   'hyy','byee','bye','yep','nope','yeah','yup','nah',
+  'interested','interesting','expansion','advisory','consultant','consulting',
+  'founder','director','manager','executive','partner','investor','advisor',
+  'registered','incorporated','licensed','certified','accredited',
+  'regarding','concerning','question','request','inquiry','update','follow',
+  'welcome','greetings','morning','evening','afternoon','regards','sincerely',
+  'currently','previously','recently','immediately','directly','generally',
+  'basically','essentially','specifically','particularly','primarily','mainly',
+  'smelly','random','test','dummy','fake','sample','unknown','anonymous',
+  'hyy','byee','bye','yep','nope','yeah','yup','nah',
 ]);
 
 const NAME_INTRO_RE      = /(?:my name is|this is|you can call me|they call me|i am|i'm|im)\s+([A-Za-z][a-zA-Z'\-]{1,30}(?:\s+[A-Za-z][a-zA-Z'\-]{1,30}){0,2})/i;
@@ -548,9 +557,15 @@ async function extractEntities(msg, mem) {
   }
 
   // Target countries
+  // Target countries — FIX 3: short replies (e.g. just "UAE") don't need expand intent
   if (!validationError && !NEGATION_RE.test(lower)) {
     for (const kw of Object.keys(COUNTRY_MAP)) {
-      if (lower.includes(kw) && EXPAND_INTENT_RE.test(lower)) {
+      const hasCountry = lower.includes(kw);
+      const hasExpandIntent = EXPAND_INTENT_RE.test(lower);
+      // Accept if: has expand intent, OR message is short (likely a direct answer to "which market?")
+      const isShortReply = lower.trim().length <= 40;
+      if (hasCountry && (hasExpandIntent || isShortReply))
+      {
         const country  = COUNTRY_MAP[kw];
         const existing = mem.targetCountries || [];
         if (!existing.includes(country)) {
@@ -576,10 +591,43 @@ async function extractEntities(msg, mem) {
       }
       // FIX: Also try bare keyword match — user might just type "India" or "UAE"
       // Only do this if message is short (likely a direct answer to "which country are you in?")
-      if (!updates.currentCountry && lower.trim().length <= 30) {
-        for (const kw of Object.keys(COUNTRY_MAP)) {
-          if (lower.trim() === kw || lower.trim().startsWith(kw + ' ') || lower.trim().endsWith(' ' + kw)) {
-            updates.currentCountry = COUNTRY_MAP[kw];
+      // Current country — FIX 2: fixed regex (was broken with {2,30?} lazy+consuming end), 
+  // now uses multiple simple patterns + bare keyword fallback
+  if (!mem.currentCountry && !validationError) {
+    if (/\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur|i(?:'m| am) indian)\b/i.test(lower)) {
+      updates.currentCountry = 'India';
+    } else {
+      // FIX: replaced broken {2,30?} regex with separate simple patterns
+      const basedPatterns = [
+        /\bbased in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bi(?:'m| am) (?:based |currently )?in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bliving in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bi(?:'m| am) from\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bcurrently in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bfrom\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+      ];
+      for (const pat of basedPatterns) {
+        const bm = lower.match(pat);
+        if (bm) {
+          const place  = bm[1].trim().replace(/\s+/g, ' ');
+          const mapped = COUNTRY_MAP[place];
+          if (mapped) { updates.currentCountry = mapped; break; }
+          // Partial keyword match within the phrase
+          for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
+            if (place === kw || place.startsWith(kw + ' ') || place.endsWith(' ' + kw)) {
+              updates.currentCountry = country;
+              break;
+            }
+          }
+          if (updates.currentCountry) break;
+        }
+      }
+      // Bare keyword fallback — user just types "India" or "UAE" as direct answer
+      if (!updates.currentCountry && lower.trim().length <= 35) {
+        const bare = lower.trim();
+        for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
+          if (bare === kw || bare === country.toLowerCase()) {
+            updates.currentCountry = country;
             break;
           }
         }
@@ -1213,12 +1261,17 @@ app.post('/api/chat', async function(req, res) {
     await maybeUpdateSummary(session);
 
     // FIX: Always update lead data after every advisory turn to keep it fresh
-    if (isLeadSaveable(mem)) {
-      if (!state.leadSaved) { state.leadSaved = true; await sendLeadEmail(session); }
+    // FIX 4: Always persist lead data after every turn so no info is lost
+    const hasContact = !!(mem.email || mem.phone);
+    if (hasContact) {
+      if (!state.leadSaved) {
+        state.leadSaved = true;
+        await sendLeadEmail(session);
+      }
       await saveLeadData(session, true);
       await appendToSheet(session);
-    } else if (mem.name) {
-      // Has name but no contact yet — keep partial lead up to date
+    } else if (mem.name || mem.currentCountry || mem.targetCountry) {
+      // Partial lead — save even without contact so country/name info isn't lost
       await saveLeadData(session, false);
     }
 
