@@ -518,6 +518,60 @@ function validatePhone(rawPhone, currentCountry) {
     }
     return { valid: true, reason: null, cleaned: '+' + digitsOnly };
   }
+  // ── LOCAL TRUNK PREFIX (leading 0, no +) ──────────────────────────────────
+  // Many countries use a leading 0 as a trunk prefix that is dropped when dialling
+  // internationally. Handle the most common ones by country context.
+  // UK:        07xxx = mobile, 01/02xxx = geographic — 11 digits total (0 + 10)
+  // Australia: 04xx  = mobile — 10 digits total (0 + 9)
+  // Germany:   0xxx  = variable, typically 10-12 digits with the 0
+  // France:    0x xx = 10 digits total (0 + 9)
+  // Netherlands: 06x = mobile, 10 digits total (0 + 9)
+  if (digitsOnly.startsWith('0') && digitsOnly.length >= 9 && digitsOnly.length <= 12) {
+    const local = digitsOnly.slice(1); // strip trunk 0
+    const CC_BY_COUNTRY = {
+      'UK': '44', 'Australia': '61', 'Germany': '49', 'France': '33',
+      'Netherlands': '31', 'Belgium': '32', 'Spain': '34', 'Italy': '39',
+      'Portugal': '351', 'Sweden': '46', 'Norway': '47', 'Denmark': '45',
+      'Ireland': '353', 'Poland': '48', 'Turkey': '90', 'Egypt': '20',
+      'South Africa': '27', 'Nigeria': '234', 'Kenya': '254', 'Ghana': '233',
+      'Pakistan': '92', 'Bangladesh': '880', 'Sri Lanka': '94',
+      'Thailand': '66', 'Vietnam': '84', 'Malaysia': '60', 'Indonesia': '62',
+      'Philippines': '63', 'New Zealand': '64',
+    };
+    const cc = currentCountry && CC_BY_COUNTRY[currentCountry];
+    if (cc) {
+      const candidate = '+' + cc + local;
+      const candidateDigits = cc + local;
+      // Validate local digit count for this cc
+      const rule = CC_LOCAL_DIGITS[cc];
+      let lengthOk = true;
+      if (typeof rule === 'number') lengthOk = local.length === rule;
+      else if (Array.isArray(rule)) lengthOk = local.length >= rule[0] && local.length <= rule[1];
+      if (lengthOk) {
+        if (/^(.)\1+$/.test(local)) return { valid: false, reason: 'placeholder', cleaned: null };
+        console.log('🔧 Auto-expanded trunk prefix: "' + digitsOnly + '" → "' + candidate + '"');
+        return { valid: true, reason: null, cleaned: candidate };
+      }
+    }
+    // Even without country context, a number like 07911123456 (UK mobile pattern)
+    // is clearly a UK number — handle it heuristically
+    if (digitsOnly.length === 11 && digitsOnly.startsWith('07')) {
+      const candidate = '+44' + local;
+      if (!/^(.)\1+$/.test(local)) {
+        console.log('🔧 Auto-expanded UK mobile pattern: "' + digitsOnly + '" → "' + candidate + '"');
+        return { valid: true, reason: null, cleaned: candidate };
+      }
+    }
+    if (digitsOnly.length === 10 && digitsOnly.startsWith('04')) {
+      const candidate = '+61' + local;
+      if (!/^(.)\1+$/.test(local)) {
+        console.log('🔧 Auto-expanded AU mobile pattern: "' + digitsOnly + '" → "' + candidate + '"');
+        return { valid: true, reason: null, cleaned: candidate };
+      }
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
   if (digitsOnly.length === 10 && /^[2-9]/.test(digitsOnly)) return { valid: false, reason: 'missing_country_code', cleaned: null };
   if (digitsOnly.length < 8)  return { valid: false, reason: 'too_short', cleaned: null };
   if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',  cleaned: null };
@@ -676,7 +730,11 @@ async function extractEntities(msg, mem, phase) {
         const existing = mem.targetCountries || [];
         if (!existing.includes(country)) {
           updates.targetCountries = existing.concat([country]);
-          updates.targetCountry   = updates.targetCountries[0];
+          // FIX: targetCountry = the newly detected expansion country, NOT [0].
+          // [0] would be whatever was first added (often the base/current country
+          // that snuck in during onboarding), causing currentCountry === targetCountry.
+          // The most recently mentioned expansion market is always the right primary.
+          updates.targetCountry = country;
         }
         break;
       }
