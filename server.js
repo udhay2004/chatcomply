@@ -261,8 +261,6 @@ const NAME_BLACKLIST = new Set([
   'welcome','greetings','morning','evening','afternoon','regards','sincerely',
   'currently','previously','recently','immediately','directly','generally',
   'basically','essentially','specifically','particularly','primarily','mainly',
-  'smelly','random','test','dummy','fake','sample','unknown','anonymous',
-  'hyy','byee','bye','yep','nope','yeah','yup','nah',
 ]);
 
 const NAME_INTRO_RE      = /(?:my name is|this is|you can call me|they call me|i am|i'm|im)\s+([A-Za-z][a-zA-Z'\-]{1,30}(?:\s+[A-Za-z][a-zA-Z'\-]{1,30}){0,2})/i;
@@ -278,6 +276,9 @@ function extractName(msg) {
   if (/(punjabi|gujarati|marathi|bengali|tamil|telugu|sikh|hindu|muslim|christian|fan|lover|into|obsessed|huge)/i.test(lower)) return null;
   if (CORPORATE_SUFFIX_RE.test(t)) return null;
   if (/\d/.test(t)) return null;
+
+  // Don't try to extract a name from messages that contain email/phone content
+  if (/@/.test(t) || /my mail|my email|my number|my phone|whatsapp/i.test(lower)) return null;
 
   const intro = t.match(NAME_INTRO_RE);
   if (intro) {
@@ -307,8 +308,64 @@ function stripHallucinatedName(reply, knownName) {
 }
 
 // ─────────────────────────────────────────────
-// EMAIL VALIDATION
+// EMAIL EXTRACTION & VALIDATION
 // ─────────────────────────────────────────────
+
+// FIX: Extract email robustly from free-form text including mixed email+phone messages
+// Handles: "my mail is foo@bar.com", "my mail is foobar gmail", "email: foo@bar.com and number is..."
+function extractEmailFromText(msg) {
+  const text = msg.trim();
+
+  // 1. Standard email in text (highest confidence)
+  const stdMatch = text.match(/\b([A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,})\b/);
+  if (stdMatch) return stdMatch[1];
+
+  // 2. "username at domain dot com" spelling
+  const atDotMatch = text.match(/\b([A-Za-z0-9._%+\-]+)\s+at\s+([A-Za-z0-9]+)\s+dot\s+(com|net|org|co\.in|in|io)\b/i);
+  if (atDotMatch) return atDotMatch[1] + '@' + atDotMatch[2] + '.' + atDotMatch[3];
+
+  // 3. "username gmail/yahoo/hotmail/outlook" (missing @)
+  const missingAt = text.match(/\b([A-Za-z0-9._%+\-]+)\s+(gmail|yahoo|hotmail|outlook)(?:\.com)?\b/i);
+  if (missingAt) return missingAt[1] + '@' + missingAt[2].toLowerCase() + '.com';
+
+  // 4. "my mail/email is <something>" — phrase-based
+  // Only grab if what follows looks like it could be an email (has @ or known provider)
+  const phraseMatch = text.match(/(?:my (?:mail|email)(?:\s+(?:is|address|id))?|email\s*(?:is|:)|e-?mail\s*(?:is|:))\s*([^\s,;]{3,80})/i);
+  if (phraseMatch) {
+    const candidate = phraseMatch[1].trim().toLowerCase();
+    // If it already has @, return as-is for validation
+    if (candidate.includes('@')) return candidate;
+    // If it ends with a known provider name, it's a missing-@ case
+    const providerMatch = candidate.match(/^([a-z0-9._%+\-]+)(gmail|yahoo|hotmail|outlook)$/i);
+    if (providerMatch) return providerMatch[1] + '@' + providerMatch[2].toLowerCase() + '.com';
+    // Otherwise it's truly incomplete (e.g. "goegoiarmani") — return as invalid marker
+    // BUT only if it doesn't look like it could be the local part of an email
+    // (i.e., if no provider context, don't guess — flag as incomplete)
+    return { incomplete: true, raw: candidate };
+  }
+
+  return null;
+}
+
+function preCleanEmail(rawText) {
+  if (!rawText || typeof rawText !== 'string') return { cleaned: null, hadTypo: false };
+  const text = rawText.trim().toLowerCase();
+  let match;
+  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+gmail(?:\.com)?$/i)))   return { cleaned: match[1] + '@gmail.com',   hadTypo: true };
+  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+yahoo(?:\.com)?$/i)))   return { cleaned: match[1] + '@yahoo.com',   hadTypo: true };
+  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+hotmail(?:\.com)?$/i))) return { cleaned: match[1] + '@hotmail.com', hadTypo: true };
+  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+outlook(?:\.com)?$/i))) return { cleaned: match[1] + '@outlook.com', hadTypo: true };
+  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9]+)\s+dot\s+(com|net|org|in|io|co)$/i)))
+    return { cleaned: match[1] + '@' + match[2] + '.' + match[3], hadTypo: true };
+  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9.\-]+\.[a-z]{2,})$/i)))
+    return { cleaned: match[1] + '@' + match[2], hadTypo: true };
+  const typoMap = { '.cmo':'.com','.cim':'.com','.conm':'.com','.coom':'.com','.gmal':'.gmail','.gmial':'.gmail','.yaho':'.yahoo','.yhaoo':'.yahoo' };
+  for (const bad of Object.keys(typoMap)) {
+    if (text.endsWith(bad)) return { cleaned: text.slice(0, -bad.length) + typoMap[bad], hadTypo: true };
+  }
+  return { cleaned: null, hadTypo: false };
+}
+
 async function validateEmail(rawInput, options) {
   options = options || { skipDNS: false };
   if (!rawInput || typeof rawInput !== 'string') return { valid: false, reason: 'empty' };
@@ -347,27 +404,8 @@ async function validateEmail(rawInput, options) {
   return { valid: true, reason: null, cleaned: trimmed };
 }
 
-function preCleanEmail(rawText) {
-  if (!rawText || typeof rawText !== 'string') return { cleaned: null, hadTypo: false };
-  const text = rawText.trim().toLowerCase();
-  let match;
-  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+gmail(?:\.com)?$/i)))   return { cleaned: match[1] + '@gmail.com',   hadTypo: true };
-  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+yahoo(?:\.com)?$/i)))   return { cleaned: match[1] + '@yahoo.com',   hadTypo: true };
-  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+hotmail(?:\.com)?$/i))) return { cleaned: match[1] + '@hotmail.com', hadTypo: true };
-  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+outlook(?:\.com)?$/i))) return { cleaned: match[1] + '@outlook.com', hadTypo: true };
-  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9]+)\s+dot\s+(com|net|org|in|io|co)$/i)))
-    return { cleaned: match[1] + '@' + match[2] + '.' + match[3], hadTypo: true };
-  if ((match = text.match(/^([a-z0-9._%+\-]+)\s+at\s+([a-z0-9.\-]+\.[a-z]{2,})$/i)))
-    return { cleaned: match[1] + '@' + match[2], hadTypo: true };
-  const typoMap = { '.cmo':'.com','.cim':'.com','.conm':'.com','.coom':'.com','.gmal':'.gmail','.gmial':'.gmail','.yaho':'.yahoo','.yhaoo':'.yahoo' };
-  for (const bad of Object.keys(typoMap)) {
-    if (text.endsWith(bad)) return { cleaned: text.slice(0, -bad.length) + typoMap[bad], hadTypo: true };
-  }
-  return { cleaned: null, hadTypo: false };
-}
-
 // ─────────────────────────────────────────────
-// PHONE VALIDATION — FIX: proper India prefix validation
+// PHONE VALIDATION
 // ─────────────────────────────────────────────
 function validatePhone(rawPhone, currentCountry) {
   if (!rawPhone) return { valid: false, reason: 'empty', cleaned: null };
@@ -387,19 +425,13 @@ function validatePhone(rawPhone, currentCountry) {
 
   if (isIndiaContext) {
     let local = digitsOnly;
-    // Strip country code prefix in all its forms
     if (local.startsWith('091') && local.length === 13) local = local.slice(3);
     else if (local.startsWith('91') && local.length === 12) local = local.slice(2);
     else if (local.startsWith('0')  && local.length === 11) local = local.slice(1);
 
     if (local.length < 10) return { valid: false, reason: 'too_short_india',  cleaned: null };
     if (local.length > 10) return { valid: false, reason: 'too_long_india',   cleaned: null };
-
-    // FIX: Indian mobile numbers MUST start with 6, 7, 8, or 9
-    // Numbers starting with 1-5 are landlines/invalid for mobile
     if (!/^[6-9]/.test(local))  return { valid: false, reason: 'invalid_india_prefix', cleaned: null };
-
-    // Reject repeating patterns and obvious placeholders
     if (/^(.)\1{9}$/.test(local)) return { valid: false, reason: 'placeholder', cleaned: null };
     if (local === '1234567890' || local === '0123456789') return { valid: false, reason: 'placeholder', cleaned: null };
 
@@ -415,7 +447,6 @@ function validatePhone(rawPhone, currentCountry) {
   }
 
   // ── NO COUNTRY CODE ──
-  // 10-digit number starting 2-9 is likely a US/India number missing country code
   if (digitsOnly.length === 10 && /^[2-9]/.test(digitsOnly)) return { valid: false, reason: 'missing_country_code', cleaned: null };
   if (digitsOnly.length < 8)  return { valid: false, reason: 'too_short', cleaned: null };
   if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',  cleaned: null };
@@ -428,6 +459,7 @@ function getEmailFeedback(reason, name) {
   const n = name ? ', ' + name : '';
   const map = {
     format:           'That doesn\'t look like a valid email address' + n + '. Could you share it in the format name@company.com?',
+    incomplete:       'I think you may have missed part of your email address' + n + '. Could you share the full address, like name@gmail.com?',
     typo_tld:         'There might be a small typo in that email' + n + ' — the ending doesn\'t look right. Could you double-check and re-enter it?',
     fake_domain:      'That doesn\'t look like a real email address' + n + '. Our team will need a valid business or personal email to follow up.',
     domain_not_found: 'I couldn\'t verify the domain for that email' + n + '. Could you double-check the spelling and try again?',
@@ -451,45 +483,49 @@ function getPhoneFeedback(reason, name) {
 }
 
 // ─────────────────────────────────────────────
-// CONTACT DETECTION
+// CONTACT DETECTION — phone from free text
 // ─────────────────────────────────────────────
-function detectEmailAttempt(msg) {
-  const clean = msg.replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '').trim();
-  const stdMatch = clean.match(/\b[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}\b/);
-  if (stdMatch) return stdMatch[0];
-  const atDotMatch = clean.match(/\b([A-Za-z0-9._%+\-]+)\s+at\s+([A-Za-z0-9]+)\s+dot\s+(com|net|org|co\.in|in)\b/i);
-  if (atDotMatch) return atDotMatch[1] + '@' + atDotMatch[2] + '.' + atDotMatch[3];
-  const missingAt = clean.match(/^([A-Za-z0-9._%+\-]+)\s+(gmail|yahoo|hotmail|outlook)(?:\.com)?$/i);
-  if (missingAt) return missingAt[1] + '@' + missingAt[2] + '.com';
-  const phraseMatch = clean.match(/(?:my email(?:\s+(?:is|address|id))?|email\s*(?:is|:)|e-?mail\s*(?:is|:))\s*([^\s@,]{2,60})/i);
+
+// FIX: Extract phone robustly from free-form text including mixed messages
+// "my mail is foo@bar.com and number is +18489393" → extracts +18489393
+function extractPhoneFromText(msg) {
+  const text = msg.trim();
+
+  // 1. Phrase-based: "number is X", "phone is X", "call me at X", etc.
+  const phraseMatch = text.match(/(?:(?:my\s+)?(?:number|phone|mobile|whatsapp|contact)(?:\s+(?:is|no|number))?|call\s+me\s+at|reach\s+me\s+at|whatsapp\s*(?:is|:))\s*([\+\d][\d\s\-().]{3,25})/i);
   if (phraseMatch) {
-    const candidate = phraseMatch[1].trim();
-    if (candidate.includes('@')) return candidate;
-    return { invalid: true, raw: candidate };
+    const raw = phraseMatch[1].trim();
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 7 && digits.length <= 15) return raw;
   }
+
+  // 2. Bare phone number — only if message looks purely like a phone (nothing else textual)
+  const bare = text.replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM)/gi, '').trim();
+  if (/^[\+0]?[\d\s\-().]{7,25}$/.test(bare)) {
+    const digits = bare.replace(/\D/g, '');
+    if (digits.length >= 7 && digits.length <= 15) return bare;
+  }
+
+  // 3. Look for phone-like token in mixed messages (e.g. "mail is foo@bar.com and number is +18489393")
+  // Find all sequences that look like phone numbers
+  const phoneTokens = text.match(/[\+][\d\s\-().]{6,20}|\b\d{7,15}\b/g);
+  if (phoneTokens) {
+    // Prefer tokens starting with + (international format)
+    const intl = phoneTokens.find(function(t) { return t.startsWith('+'); });
+    if (intl) return intl.trim();
+    // Otherwise take first token that's a plausible length
+    for (const t of phoneTokens) {
+      const digits = t.replace(/\D/g, '');
+      if (digits.length >= 7 && digits.length <= 15) return t.trim();
+    }
+  }
+
   return null;
 }
 
-function detectPhoneAttempt(msg) {
-  const cleaned = msg.trim().replace(/\s+\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)/gi, '').trim();
-  if (!/^[\+0]?[\d\s\-().]{7,25}$/.test(cleaned)) return null;
-  const digits = cleaned.replace(/\D/g, '');
-  if (digits.length < 7 || digits.length > 15) return null;
-  if (cleaned.includes('$') || cleaned.includes('€') || cleaned.includes('₹')) return null;
-  return cleaned;
-}
-
-function detectPhoneInSentence(msg) {
-  const m = msg.match(/(?:my (?:number|phone|mobile|whatsapp|contact)(?: (?:is|number|no))?|phone\s*(?:is|:)|number\s*(?:is|:)|contact\s*(?:is|:)|reach me at|call me at|whatsapp\s*(?:is|:))\s*([\+\d][\d\s\-().]{3,25})/i);
-  if (!m) return null;
-  const raw = m[1].trim();
-  const digits = raw.replace(/\D/g, '');
-  if (digits.length < 4) return null;
-  return { raw: raw, digits: digits };
-}
-
 // ─────────────────────────────────────────────
-// ENTITY EXTRACTION
+// ENTITY EXTRACTION — FIX: independent email & phone extraction,
+// no early return on email failure so phone is still captured
 // ─────────────────────────────────────────────
 const SERVICE_MAP = {
   'incorporat': 'Incorporation', 'register': 'Incorporation', 'set up': 'Incorporation',
@@ -505,49 +541,63 @@ const NEGATION_RE      = /\b(not|never|don't|won't|no longer|excluding|except|av
 async function extractEntities(msg, mem) {
   const lower   = msg.toLowerCase();
   const updates = {};
-  let   validationError = null;
+  const validationErrors = []; // FIX: collect all errors, don't short-circuit
 
-  // Email
+  // ── EMAIL ──
   if (!mem.email) {
-    const rawEmailResult = detectEmailAttempt(msg);
-    if (rawEmailResult) {
-      if (typeof rawEmailResult === 'object' && rawEmailResult.invalid) {
-        validationError = { type: 'email', message: getEmailFeedback('format', mem.name) };
-        return { updates: updates, validationError: validationError };
-      }
-      const emailCheck = await validateEmail(rawEmailResult);
-      if (emailCheck.valid) {
-        updates.email = emailCheck.cleaned || rawEmailResult.trim().toLowerCase();
-        console.log('✅ Email validated: ' + updates.email);
+    const emailResult = extractEmailFromText(msg);
+    if (emailResult) {
+      if (typeof emailResult === 'object' && emailResult.incomplete) {
+        // User gave something like "goegoiarmani" without a domain
+        // Don't error immediately — maybe they also gave a phone. Flag for later.
+        console.log('⚠️ Incomplete email attempt: ' + emailResult.raw);
+        validationErrors.push({ type: 'email', message: getEmailFeedback('incomplete', mem.name), priority: 2 });
       } else {
-        console.log('❌ Email rejected (' + emailCheck.reason + '): ' + rawEmailResult);
-        validationError = { type: 'email', message: getEmailFeedback(emailCheck.reason, mem.name) };
-        return { updates: updates, validationError: validationError };
+        const emailCheck = await validateEmail(emailResult);
+        if (emailCheck.valid) {
+          updates.email = emailCheck.cleaned || emailResult.trim().toLowerCase();
+          console.log('✅ Email validated: ' + updates.email);
+        } else {
+          console.log('❌ Email rejected (' + emailCheck.reason + '): ' + emailResult);
+          validationErrors.push({ type: 'email', message: getEmailFeedback(emailCheck.reason, mem.name), priority: 1 });
+        }
       }
     }
   }
 
-  // Phone
-  if (!mem.phone && !validationError) {
-    let rawPhone = detectPhoneAttempt(msg);
-    if (!rawPhone) {
-      const sentencePhone = detectPhoneInSentence(msg);
-      if (sentencePhone) rawPhone = sentencePhone.raw;
-    }
+  // ── PHONE — always run, independent of email result ──
+  if (!mem.phone) {
+    const rawPhone = extractPhoneFromText(msg);
     if (rawPhone) {
       const phoneCheck = validatePhone(rawPhone, mem.currentCountry);
       if (phoneCheck.valid) {
         updates.phone = phoneCheck.cleaned;
         console.log('✅ Phone validated: ' + updates.phone);
+        // If phone is valid, clear lower-priority email errors (incomplete/format)
+        // because we now have a contact method — email can be asked separately
+        const emailErr = validationErrors.find(function(e) { return e.type === 'email'; });
+        if (emailErr) {
+          console.log('ℹ️ Phone captured successfully — deferring email correction to follow-up');
+          // Remove the email error so we don't block, but flag that email needs fixing
+          updates._emailNeedsCorrection = true;
+          validationErrors.length = 0;
+        }
       } else {
         console.log('❌ Phone rejected (' + phoneCheck.reason + '): ' + rawPhone);
-        validationError = { type: 'phone', message: getPhoneFeedback(phoneCheck.reason, mem.name) };
-        return { updates: updates, validationError: validationError };
+        validationErrors.push({ type: 'phone', message: getPhoneFeedback(phoneCheck.reason, mem.name), priority: 1 });
       }
     }
   }
 
-  // Company name
+  // ── RESOLVE: if only one type of error and no successful contact captured ──
+  // Return only the highest-priority error
+  let validationError = null;
+  if (validationErrors.length > 0 && !updates.email && !updates.phone) {
+    validationErrors.sort(function(a, b) { return a.priority - b.priority; });
+    validationError = validationErrors[0];
+  }
+
+  // ── COMPANY NAME ──
   if (!mem.companyName && !validationError) {
     const companyMatch = msg.match(/(?:my company(?:\s+is)?|our company(?:\s+is)?|company name(?:\s+is)?|company:|firm:)\s+([A-Za-z0-9\s&.,'\-]{2,40}?)(?:\s*[,.]|$)/i);
     if (companyMatch) {
@@ -556,7 +606,7 @@ async function extractEntities(msg, mem) {
     }
   }
 
-  // Target countries
+  // ── TARGET COUNTRIES ──
   if (!validationError && !NEGATION_RE.test(lower)) {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
@@ -574,7 +624,7 @@ async function extractEntities(msg, mem) {
     }
   }
 
-  // Current country
+  // ── CURRENT COUNTRY ──
   if (!mem.currentCountry && !validationError) {
     if (/\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur|i(?:'m| am) indian)\b/i.test(lower)) {
       updates.currentCountry = 'India';
@@ -592,14 +642,10 @@ async function extractEntities(msg, mem) {
         if (bm) {
           const place  = bm[1].trim().replace(/\s+/g, ' ');
           const mapped = COUNTRY_MAP[place];
-          if (mapped) { 
-            updates.currentCountry = mapped; 
-            break; 
-          }
+          if (mapped) { updates.currentCountry = mapped; break; }
           for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
             if (place === kw || place.startsWith(kw + ' ') || place.endsWith(' ' + kw)) {
-              updates.currentCountry = country;
-              break;
+              updates.currentCountry = country; break;
             }
           }
           if (updates.currentCountry) break;
@@ -609,15 +655,14 @@ async function extractEntities(msg, mem) {
         const bare = lower.trim();
         for (const [kw, country] of Object.entries(COUNTRY_MAP)) {
           if (bare === kw || bare === country.toLowerCase()) {
-            updates.currentCountry = country;
-            break;
+            updates.currentCountry = country; break;
           }
         }
       }
     }
   }
 
-  // Services
+  // ── SERVICES ──
   if (!validationError) {
     for (const kw of Object.keys(SERVICE_MAP)) {
       if (lower.includes(kw)) {
@@ -893,14 +938,11 @@ function checkMemoryRecall(msg, session) {
 
 // ─────────────────────────────────────────────
 // LEAD PERSISTENCE
-// FIX: saveLeadData — single function that always persists ALL known fields
 // ─────────────────────────────────────────────
 function isLeadSaveable(mem) {
   return !!(mem.email || mem.phone);
 }
 
-// FIX: Always store ALL known fields — name, countries, services, everything
-// whether partial or complete. Never skip saving because a field is missing.
 async function saveLeadData(session, isComplete) {
   const ready = await ensureMongo();
   if (!ready || !leadsCol) {
@@ -910,7 +952,6 @@ async function saveLeadData(session, isComplete) {
   const mem   = session.memory;
   const state = session.state;
 
-  // FIX: Don't save anything if we have absolutely nothing useful
   if (!mem.name && !mem.email && !mem.phone) {
     console.log('⏭️ Skipping lead save — no name/email/phone yet');
     return;
@@ -935,14 +976,12 @@ async function saveLeadData(session, isComplete) {
   };
 
   try {
-    // Find existing lead by email, phone, or sessionId
     let existing = null;
     if (mem.email)  existing = await leadsCol.findOne({ email: mem.email });
     if (!existing && mem.phone) existing = await leadsCol.findOne({ phone: mem.phone });
     if (!existing)  existing = await leadsCol.findOne({ sessionId: session.sessionId });
 
     if (existing) {
-      // Merge: only update fields that have a real value (don't overwrite with null)
       const merged = Object.assign({}, existing);
       for (const k of Object.keys(leadData)) {
         const v = leadData[k];
@@ -1053,14 +1092,30 @@ app.post('/api/chat', async function(req, res) {
 
     console.log('\n📩 [' + sessionId.slice(-8) + '] Phase: ' + state.phase + ', Msg: "' + message.substring(0,60) + '"');
 
-    // ── FIRST MESSAGE ──
-    // FIX: Don't save partial lead here — we have nothing yet. Just show welcome.
+    // ── FIRST MESSAGE — show welcome, then fall through to extract name from THIS message ──
+    // FIX: Don't return early on first message if the user's message contains their name.
+    // Instead show welcome ONLY if history is empty, then continue processing the message.
     if (session.history.length === 0 && (state.phase === 'new' || state.phase === 'onboarding_name')) {
       state.phase = 'onboarding_name';
-      const welcome = 'Hi there! 👋 Welcome to Comply Globally.\n\nI\'m your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
-      session.history.push({ role: 'assistant', content: welcome });
+      // Check: is there actually a name in this first message?
+      const firstMsgName = extractName(message);
+      if (!firstMsgName) {
+        // No name yet — show welcome and ask for name
+        const welcome = 'Hi there! 👋 Welcome to Comply Globally.\n\nI\'m your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
+        session.history.push({ role: 'assistant', content: welcome });
+        await saveSession(session);
+        return res.json({ reply: welcome, sessionId: sessionId, menu: null, phase: state.phase });
+      }
+      // Name found in first message — show welcome that acknowledges it
+      mem.name = firstMsgName;
+      console.log('✅ Name locked from first message: ' + firstMsgName);
+      advancePhase(session);
+      const nameWelcome = 'Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '!\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhere are you currently based? This helps me understand your starting point for any international expansion plans.';
+      session.history.push({ role: 'user', content: truncateMsg(message) });
+      session.history.push({ role: 'assistant', content: truncateMsg(nameWelcome) });
       await saveSession(session);
-      return res.json({ reply: welcome, sessionId: sessionId, menu: null, phase: state.phase });
+      await saveLeadData(session, false);
+      return res.json({ reply: nameWelcome, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
     // ── STEP 1: Entity extraction ──
@@ -1076,9 +1131,17 @@ app.post('/api/chat', async function(req, res) {
     let contactJustReceived = false;
     if (Object.keys(updates).length > 0) {
       const hadContact = !!(mem.email || mem.phone);
+      // Remove internal flag before merging into memory
+      const emailNeedsCorrection = updates._emailNeedsCorrection;
+      delete updates._emailNeedsCorrection;
       Object.assign(mem, updates);
       contactJustReceived = !hadContact && !!(mem.email || mem.phone);
       console.log('📝 Memory updated:', JSON.stringify(updates));
+
+      // If phone was captured but email was incomplete, note it but don't block
+      if (emailNeedsCorrection && mem.phone) {
+        console.log('📧 Email was incomplete — will ask for it after confirming phone');
+      }
     }
 
     // ── STEP 2: Name extraction ──
@@ -1090,11 +1153,9 @@ app.post('/api/chat', async function(req, res) {
 
         if (state.phase === 'new' || state.phase === 'onboarding_name') {
           advancePhase(session);
-          // FIX: Save session first so name is persisted in session,
-          // then save lead (name-only partial is worth storing now)
           await saveSession(session);
           await saveLeadData(session, false);
-          const nameReply = 'Nice to meet you, ' + n + '! 🌟\n\nWhich country are you currently based in? (e.g. India, UAE, USA, UK, Singapore)';
+          const nameReply = 'Nice to meet you, ' + n + '! 🌟\n\nWhere are you currently based? (e.g. India, UAE, USA, UK, Singapore)';
           session.history.push({ role: 'user', content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
           await saveSession(session);
@@ -1110,11 +1171,9 @@ app.post('/api/chat', async function(req, res) {
       let foundCC = null;
       const lowerMsg = message.toLowerCase().trim();
 
-      // Try keyword match (handles bare "India", "UAE" etc)
       for (const kw of Object.keys(COUNTRY_MAP)) {
         if (lowerMsg === kw || lowerMsg.includes(kw)) { foundCC = COUNTRY_MAP[kw]; break; }
       }
-      // Try phrase-based fallback
       if (!foundCC) {
         const bm = lowerMsg.match(/(?:based in|currently in|i(?:'m| am) in|living in|from|i'm from|i am from|currently in)\s+([a-z\s]+?)(?:\s|,|\.|$)/);
         if (bm) foundCC = COUNTRY_MAP[bm[1].trim()] || null;
@@ -1186,12 +1245,20 @@ app.post('/api/chat', async function(req, res) {
       advancePhase(session);
       const nameGreet   = mem.name || 'there';
       const contactType = mem.email ? 'email (' + mem.email + ')' : 'number (' + mem.phone + ')';
-      const confirmReply = 'Perfect, ' + nameGreet + '! I\'ve got your ' + contactType + '. 📧\n\nOur team will be in touch with tailored information about expanding to ' + (mem.targetCountry || 'your target market') + '. Now — what aspect of the expansion would you like to explore first?\n\nWant to explore further?\n1️⃣ What does the incorporation process look like in ' + (mem.targetCountry || 'your target market') + '?\n2️⃣ What are the banking options available?\n3️⃣ What are the tax implications for my business?\n4️⃣ What compliance requirements should I know about?';
+
+      // FIX: If we got phone but email was incomplete, ask for email after confirming
+      let confirmReply;
+      const hadIncompleteEmail = !mem.email && /my mail|my email/i.test(message);
+      if (hadIncompleteEmail && mem.phone) {
+        confirmReply = 'Got your number (' + mem.phone + '), ' + nameGreet + '! 📱\n\nIt looks like the email address didn\'t come through clearly — could you share it again in the format name@example.com? That way our team can reach you on both. 😊';
+      } else {
+        confirmReply = 'Perfect, ' + nameGreet + '! I\'ve got your ' + contactType + '. 📧\n\nOur team will be in touch with tailored information about expanding to ' + (mem.targetCountry || 'your target market') + '. Now — what aspect of the expansion would you like to explore first?\n\nWant to explore further?\n1️⃣ What does the incorporation process look like in ' + (mem.targetCountry || 'your target market') + '?\n2️⃣ What are the banking options available?\n3️⃣ What are the tax implications for my business?\n4️⃣ What compliance requirements should I know about?';
+      }
+
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(confirmReply) });
       const menu = parseMenuFromReply(confirmReply);
       if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
-      // FIX: Save complete lead, then send email and sheet
       state.leadSaved = true;
       await saveSession(session);
       await saveLeadData(session, true);
@@ -1242,8 +1309,6 @@ app.post('/api/chat', async function(req, res) {
 
     await maybeUpdateSummary(session);
 
-    // FIX: Always update lead data after every advisory turn to keep it fresh
-    // FIX 4: Always persist lead data after every turn so no info is lost
     const hasContact = !!(mem.email || mem.phone);
     if (hasContact) {
       if (!state.leadSaved) {
@@ -1253,7 +1318,6 @@ app.post('/api/chat', async function(req, res) {
       await saveLeadData(session, true);
       await appendToSheet(session);
     } else if (mem.name || mem.currentCountry || mem.targetCountry) {
-      // Partial lead — save even without contact so country/name info isn't lost
       await saveLeadData(session, false);
     }
 
@@ -1356,7 +1420,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.2 — Data integrity fix');
+    console.log('\n🚀 Comply Website Bot v3.3 — Contact parsing fix');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
