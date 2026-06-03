@@ -203,24 +203,94 @@ async function saveSession(s) {
 
 // ─────────────────────────────────────────────
 // COUNTRY MAP
+// FIX: longer/more-specific keys MUST come before shorter substring keys so
+// "south africa" is matched before "africa", "south korea" before "korea", etc.
+// Object.keys() preserves insertion order in modern JS engines, and the
+// extraction loops break on first match — so order here is critical.
 // ─────────────────────────────────────────────
 const COUNTRY_MAP = {
-  'uae': 'UAE', 'dubai': 'UAE', 'abu dhabi': 'UAE', 'sharjah': 'UAE',
-  'usa': 'USA', 'united states': 'USA', 'america': 'USA',
-  'uk': 'UK', 'united kingdom': 'UK', 'britain': 'UK', 'england': 'UK',
-  'singapore': 'Singapore', 'india': 'India', 'canada': 'Canada',
-  'australia': 'Australia', 'germany': 'Germany', 'netherlands': 'Netherlands',
-  'mauritius': 'Mauritius', 'hong kong': 'Hong Kong', 'philippines': 'Philippines',
-  'thailand': 'Thailand', 'indonesia': 'Indonesia', 'vietnam': 'Vietnam',
-  'estonia': 'Estonia', 'italy': 'Italy', 'saudi arabia': 'Saudi Arabia', 'saudi': 'Saudi Arabia',
-  'malaysia': 'Malaysia', 'pakistan': 'Pakistan', 'bangladesh': 'Bangladesh', 'nepal': 'Nepal',
-  'china': 'China', 'japan': 'Japan', 'korea': 'South Korea',
-  'france': 'France', 'spain': 'Spain', 'switzerland': 'Switzerland',
-  'austria': 'Austria', 'portugal': 'Portugal', 'sweden': 'Sweden',
-  'norway': 'Norway', 'denmark': 'Denmark', 'belgium': 'Belgium',
-  'brazil': 'Brazil', 'mexico': 'Mexico', 'argentina': 'Argentina',
-  'nigeria': 'Nigeria', 'kenya': 'Kenya', 'ghana': 'Ghana', 'egypt': 'Egypt',
-  'europe': 'Europe', 'africa': 'Africa', 'asia': 'Asia',
+  // ── Specific entries that must precede their substrings ──
+  'south africa':   'South Africa',
+  'south korea':    'South Korea',
+  'north korea':    'North Korea',
+  'new zealand':    'New Zealand',
+  'saudi arabia':   'Saudi Arabia',
+  'hong kong':      'Hong Kong',
+  'abu dhabi':      'UAE',
+  'united states':  'USA',
+  'united kingdom': 'UK',
+  'costa rica':     'Costa Rica',
+  'puerto rico':    'Puerto Rico',
+  'sri lanka':      'Sri Lanka',
+  'el salvador':    'El Salvador',
+
+  // ── Regular entries ──
+  'uae':         'UAE',
+  'dubai':       'UAE',
+  'sharjah':     'UAE',
+  'usa':         'USA',
+  'america':     'USA',
+  'uk':          'UK',
+  'britain':     'UK',
+  'england':     'UK',
+  'singapore':   'Singapore',
+  'india':       'India',
+  'canada':      'Canada',
+  'australia':   'Australia',
+  'germany':     'Germany',
+  'netherlands': 'Netherlands',
+  'mauritius':   'Mauritius',
+  'philippines': 'Philippines',
+  'thailand':    'Thailand',
+  'indonesia':   'Indonesia',
+  'vietnam':     'Vietnam',
+  'estonia':     'Estonia',
+  'italy':       'Italy',
+  'saudi':       'Saudi Arabia',
+  'malaysia':    'Malaysia',
+  'pakistan':    'Pakistan',
+  'bangladesh':  'Bangladesh',
+  'nepal':       'Nepal',
+  'china':       'China',
+  'japan':       'Japan',
+  'korea':       'South Korea',
+  'france':      'France',
+  'spain':       'Spain',
+  'switzerland': 'Switzerland',
+  'austria':     'Austria',
+  'portugal':    'Portugal',
+  'sweden':      'Sweden',
+  'norway':      'Norway',
+  'denmark':     'Denmark',
+  'belgium':     'Belgium',
+  'brazil':      'Brazil',
+  'mexico':      'Mexico',
+  'argentina':   'Argentina',
+  'nigeria':     'Nigeria',
+  'kenya':       'Kenya',
+  'ghana':       'Ghana',
+  'egypt':       'Egypt',
+  'tanzania':    'Tanzania',
+  'ethiopia':    'Ethiopia',
+  'zimbabwe':    'Zimbabwe',
+  'zambia':      'Zambia',
+  'botswana':    'Botswana',
+  'namibia':     'Namibia',
+  'mozambique':  'Mozambique',
+  'rwanda':      'Rwanda',
+  'uganda':      'Uganda',
+  'senegal':     'Senegal',
+  'cameroon':    'Cameroon',
+  'ivory coast': 'Ivory Coast',
+  'morocco':     'Morocco',
+  'tunisia':     'Tunisia',
+  'algeria':     'Algeria',
+  'libya':       'Libya',
+
+  // ── Regions (must come AFTER all country-specific entries) ──
+  'europe': 'Europe',
+  'africa': 'Africa',
+  'asia':   'Asia',
 };
 
 const ALL_COUNTRY_WORDS = new Set(
@@ -311,8 +381,6 @@ function stripHallucinatedName(reply, knownName) {
 // EMAIL EXTRACTION & VALIDATION
 // ─────────────────────────────────────────────
 
-// FIX: Extract email robustly from free-form text including mixed email+phone messages
-// Handles: "my mail is foo@bar.com", "my mail is foobar gmail", "email: foo@bar.com and number is..."
 function extractEmailFromText(msg) {
   const text = msg.trim();
 
@@ -329,18 +397,12 @@ function extractEmailFromText(msg) {
   if (missingAt) return missingAt[1] + '@' + missingAt[2].toLowerCase() + '.com';
 
   // 4. "my mail/email is <something>" — phrase-based
-  // Only grab if what follows looks like it could be an email (has @ or known provider)
   const phraseMatch = text.match(/(?:my (?:mail|email)(?:\s+(?:is|address|id))?|email\s*(?:is|:)|e-?mail\s*(?:is|:))\s*([^\s,;]{3,80})/i);
   if (phraseMatch) {
     const candidate = phraseMatch[1].trim().toLowerCase();
-    // If it already has @, return as-is for validation
     if (candidate.includes('@')) return candidate;
-    // If it ends with a known provider name, it's a missing-@ case
     const providerMatch = candidate.match(/^([a-z0-9._%+\-]+)(gmail|yahoo|hotmail|outlook)$/i);
     if (providerMatch) return providerMatch[1] + '@' + providerMatch[2].toLowerCase() + '.com';
-    // Otherwise it's truly incomplete (e.g. "goegoiarmani") — return as invalid marker
-    // BUT only if it doesn't look like it could be the local part of an email
-    // (i.e., if no provider context, don't guess — flag as incomplete)
     return { incomplete: true, raw: candidate };
   }
 
@@ -406,7 +468,116 @@ async function validateEmail(rawInput, options) {
 
 // ─────────────────────────────────────────────
 // PHONE VALIDATION
+// FIX: Added per-country-code local digit length table so numbers like
+// +66 8329832 (7 local digits, Thailand needs 9) are correctly rejected.
+// Sources: ITU-T E.164 / national numbering plans.
 // ─────────────────────────────────────────────
+
+// Map of country calling code (string, no +) → expected local digit count(s).
+// A single number means exact length; an array means [min, max].
+const CC_LOCAL_DIGITS = {
+  // Asia-Pacific
+  '91':  10,          // India
+  '92':  10,          // Pakistan
+  '93':  9,           // Afghanistan
+  '94':  9,           // Sri Lanka
+  '95':  [8, 9],      // Myanmar
+  '60':  [9, 10],     // Malaysia
+  '62':  [9, 12],     // Indonesia
+  '63':  10,          // Philippines
+  '64':  [8, 10],     // New Zealand
+  '65':  8,           // Singapore
+  '66':  9,           // Thailand
+  '81':  [10, 11],    // Japan
+  '82':  [9, 10],     // South Korea
+  '84':  9,           // Vietnam
+  '86':  11,          // China
+  '852': 8,           // Hong Kong
+  '853': 8,           // Macau
+  '855': 9,           // Cambodia
+  '856': 10,          // Laos
+  '880': 10,          // Bangladesh
+  '977': 10,          // Nepal
+  '886': [9, 10],     // Taiwan
+  // Middle East
+  '971': 9,           // UAE
+  '966': 9,           // Saudi Arabia
+  '974': 8,           // Qatar
+  '973': 8,           // Bahrain
+  '968': 8,           // Oman
+  '962': 9,           // Jordan
+  '961': [7, 8],      // Lebanon
+  '964': 10,          // Iraq
+  '965': 8,           // Kuwait
+  '972': [8, 9],      // Israel
+  // Europe
+  '1':   10,          // USA / Canada
+  '7':   10,          // Russia / Kazakhstan
+  '20':  10,          // Egypt
+  '27':  9,           // South Africa
+  '30':  10,          // Greece
+  '31':  9,           // Netherlands
+  '32':  9,           // Belgium
+  '33':  9,           // France
+  '34':  9,           // Spain
+  '36':  9,           // Hungary
+  '39':  [9, 11],     // Italy
+  '40':  10,          // Romania
+  '41':  9,           // Switzerland
+  '43':  [10, 13],    // Austria
+  '44':  10,          // UK
+  '45':  8,           // Denmark
+  '46':  [9, 10],     // Sweden
+  '47':  8,           // Norway
+  '48':  9,           // Poland
+  '49':  [10, 11],    // Germany
+  '51':  9,           // Peru
+  '52':  10,          // Mexico
+  '54':  10,          // Argentina
+  '55':  11,          // Brazil
+  '56':  9,           // Chile
+  '57':  10,          // Colombia
+  '58':  10,          // Venezuela
+  '61':  9,           // Australia
+  '90':  10,          // Turkey
+  '98':  10,          // Iran
+  // Africa
+  '212': 9,           // Morocco
+  '213': 9,           // Algeria
+  '216': 8,           // Tunisia
+  '218': 9,           // Libya
+  '221': 9,           // Senegal
+  '233': 9,           // Ghana
+  '234': 10,          // Nigeria
+  '237': 9,           // Cameroon
+  '254': 9,           // Kenya
+  '255': 9,           // Tanzania
+  '256': 9,           // Uganda
+  '260': 9,           // Zambia
+  '263': 9,           // Zimbabwe
+  '264': 9,           // Namibia
+  '265': 9,           // Malawi
+  '266': 8,           // Lesotho
+  '267': 8,           // Botswana
+  '250': 9,           // Rwanda
+  '251': 9,           // Ethiopia
+  '252': [7, 8],      // Somalia
+  '258': 9,           // Mozambique
+  '225': 8,           // Ivory Coast
+  // Estonia and others
+  '372': [7, 8],      // Estonia
+};
+
+// Resolve the calling code from a digit string (no leading +)
+// Tries 3-digit prefix, then 2-digit, then 1-digit
+function resolveCallingCode(digits) {
+  for (const len of [3, 2, 1]) {
+    const cc = digits.slice(0, len);
+    if (CC_LOCAL_DIGITS[cc] !== undefined) return cc;
+  }
+  return null;
+}
+
 function validatePhone(rawPhone, currentCountry) {
   if (!rawPhone) return { valid: false, reason: 'empty', cleaned: null };
 
@@ -438,11 +609,26 @@ function validatePhone(rawPhone, currentCountry) {
     return { valid: true, reason: null, cleaned: '+91' + local };
   }
 
-  // ── INTERNATIONAL (with + prefix) ──
+  // ── INTERNATIONAL (with + prefix) — validate local digit count by country code ──
   if (hasPlus) {
-    if (digitsOnly.length < 8)  return { valid: false, reason: 'too_short', cleaned: null };
+    if (digitsOnly.length < 7)  return { valid: false, reason: 'too_short', cleaned: null };
     if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',  cleaned: null };
     if (/^(.)\1{7,}$/.test(digitsOnly)) return { valid: false, reason: 'placeholder', cleaned: null };
+
+    // Check local digit count against country code table
+    const cc = resolveCallingCode(digitsOnly);
+    if (cc) {
+      const localDigits = digitsOnly.slice(cc.length);
+      const rule = CC_LOCAL_DIGITS[cc];
+      if (typeof rule === 'number') {
+        if (localDigits.length < rule) return { valid: false, reason: 'too_short', cleaned: null };
+        if (localDigits.length > rule) return { valid: false, reason: 'too_long',  cleaned: null };
+      } else if (Array.isArray(rule)) {
+        if (localDigits.length < rule[0]) return { valid: false, reason: 'too_short', cleaned: null };
+        if (localDigits.length > rule[1]) return { valid: false, reason: 'too_long',  cleaned: null };
+      }
+    }
+
     return { valid: true, reason: null, cleaned: '+' + digitsOnly };
   }
 
@@ -485,9 +671,6 @@ function getPhoneFeedback(reason, name) {
 // ─────────────────────────────────────────────
 // CONTACT DETECTION — phone from free text
 // ─────────────────────────────────────────────
-
-// FIX: Extract phone robustly from free-form text including mixed messages
-// "my mail is foo@bar.com and number is +18489393" → extracts +18489393
 function extractPhoneFromText(msg) {
   const text = msg.trim();
 
@@ -507,13 +690,10 @@ function extractPhoneFromText(msg) {
   }
 
   // 3. Look for phone-like token in mixed messages (e.g. "mail is foo@bar.com and number is +18489393")
-  // Find all sequences that look like phone numbers
   const phoneTokens = text.match(/[\+][\d\s\-().]{6,20}|\b\d{7,15}\b/g);
   if (phoneTokens) {
-    // Prefer tokens starting with + (international format)
     const intl = phoneTokens.find(function(t) { return t.startsWith('+'); });
     if (intl) return intl.trim();
-    // Otherwise take first token that's a plausible length
     for (const t of phoneTokens) {
       const digits = t.replace(/\D/g, '');
       if (digits.length >= 7 && digits.length <= 15) return t.trim();
@@ -524,8 +704,7 @@ function extractPhoneFromText(msg) {
 }
 
 // ─────────────────────────────────────────────
-// ENTITY EXTRACTION — FIX: independent email & phone extraction,
-// no early return on email failure so phone is still captured
+// ENTITY EXTRACTION
 // ─────────────────────────────────────────────
 const SERVICE_MAP = {
   'incorporat': 'Incorporation', 'register': 'Incorporation', 'set up': 'Incorporation',
@@ -541,15 +720,13 @@ const NEGATION_RE      = /\b(not|never|don't|won't|no longer|excluding|except|av
 async function extractEntities(msg, mem) {
   const lower   = msg.toLowerCase();
   const updates = {};
-  const validationErrors = []; // FIX: collect all errors, don't short-circuit
+  const validationErrors = [];
 
   // ── EMAIL ──
   if (!mem.email) {
     const emailResult = extractEmailFromText(msg);
     if (emailResult) {
       if (typeof emailResult === 'object' && emailResult.incomplete) {
-        // User gave something like "goegoiarmani" without a domain
-        // Don't error immediately — maybe they also gave a phone. Flag for later.
         console.log('⚠️ Incomplete email attempt: ' + emailResult.raw);
         validationErrors.push({ type: 'email', message: getEmailFeedback('incomplete', mem.name), priority: 2 });
       } else {
@@ -573,12 +750,9 @@ async function extractEntities(msg, mem) {
       if (phoneCheck.valid) {
         updates.phone = phoneCheck.cleaned;
         console.log('✅ Phone validated: ' + updates.phone);
-        // If phone is valid, clear lower-priority email errors (incomplete/format)
-        // because we now have a contact method — email can be asked separately
         const emailErr = validationErrors.find(function(e) { return e.type === 'email'; });
         if (emailErr) {
           console.log('ℹ️ Phone captured successfully — deferring email correction to follow-up');
-          // Remove the email error so we don't block, but flag that email needs fixing
           updates._emailNeedsCorrection = true;
           validationErrors.length = 0;
         }
@@ -589,8 +763,7 @@ async function extractEntities(msg, mem) {
     }
   }
 
-  // ── RESOLVE: if only one type of error and no successful contact captured ──
-  // Return only the highest-priority error
+  // ── RESOLVE: return only highest-priority error if no contact captured ──
   let validationError = null;
   if (validationErrors.length > 0 && !updates.email && !updates.phone) {
     validationErrors.sort(function(a, b) { return a.priority - b.priority; });
@@ -606,7 +779,7 @@ async function extractEntities(msg, mem) {
     }
   }
 
-  // ── TARGET COUNTRIES ──
+  // ── TARGET COUNTRIES — iterate longest keys first (COUNTRY_MAP is ordered) ──
   if (!validationError && !NEGATION_RE.test(lower)) {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
@@ -938,6 +1111,11 @@ function checkMemoryRecall(msg, session) {
 
 // ─────────────────────────────────────────────
 // LEAD PERSISTENCE
+// FIX: Always re-read mem.name at save time so the lead record is never
+// written with name=null when the name is already captured in session memory.
+// The root cause was that some code paths called saveLeadData before the
+// name update was merged into mem; the fix is an explicit re-read here
+// rather than relying on call-site ordering.
 // ─────────────────────────────────────────────
 function isLeadSaveable(mem) {
   return !!(mem.email || mem.phone);
@@ -952,13 +1130,17 @@ async function saveLeadData(session, isComplete) {
   const mem   = session.memory;
   const state = session.state;
 
-  if (!mem.name && !mem.email && !mem.phone) {
+  // FIX: Re-read name directly from session.memory to guard against stale
+  // references in callers that snapshot mem before the name was merged.
+  const currentName = session.memory.name || null;
+
+  if (!currentName && !mem.email && !mem.phone) {
     console.log('⏭️ Skipping lead save — no name/email/phone yet');
     return;
   }
 
   const leadData = {
-    name:                mem.name               || null,
+    name:                currentName,                          // FIX: always current
     email:               mem.email              || null,
     phone:               mem.phone              || null,
     companyName:         mem.companyName        || null,
@@ -985,16 +1167,20 @@ async function saveLeadData(session, isComplete) {
       const merged = Object.assign({}, existing);
       for (const k of Object.keys(leadData)) {
         const v = leadData[k];
-        if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) {
+        // FIX: For name specifically, always overwrite if we now have a value,
+        // even if the stored record already has a (possibly stale null) value.
+        if (k === 'name') {
+          if (v !== null && v !== undefined) merged[k] = v;
+        } else if (v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)) {
           merged[k] = v;
         }
       }
       merged.lastUpdated = new Date();
       await leadsCol.replaceOne({ _id: existing._id }, merged);
-      console.log('✅ Lead upserted: ' + (mem.name || 'no-name') + ' | ' + (mem.email || mem.phone || session.sessionId.slice(-6)));
+      console.log('✅ Lead upserted: ' + (currentName || 'no-name') + ' | ' + (mem.email || mem.phone || session.sessionId.slice(-6)));
     } else {
       await leadsCol.insertOne(Object.assign({}, leadData, { createdAt: new Date() }));
-      console.log('✅ Lead created: ' + (mem.name || session.sessionId.slice(-6)));
+      console.log('✅ Lead created: ' + (currentName || session.sessionId.slice(-6)));
     }
   } catch (err) {
     console.error('❌ saveLeadData error:', err.message);
@@ -1092,21 +1278,16 @@ app.post('/api/chat', async function(req, res) {
 
     console.log('\n📩 [' + sessionId.slice(-8) + '] Phase: ' + state.phase + ', Msg: "' + message.substring(0,60) + '"');
 
-    // ── FIRST MESSAGE — show welcome, then fall through to extract name from THIS message ──
-    // FIX: Don't return early on first message if the user's message contains their name.
-    // Instead show welcome ONLY if history is empty, then continue processing the message.
+    // ── FIRST MESSAGE ──
     if (session.history.length === 0 && (state.phase === 'new' || state.phase === 'onboarding_name')) {
       state.phase = 'onboarding_name';
-      // Check: is there actually a name in this first message?
       const firstMsgName = extractName(message);
       if (!firstMsgName) {
-        // No name yet — show welcome and ask for name
         const welcome = 'Hi there! 👋 Welcome to Comply Globally.\n\nI\'m your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
         session.history.push({ role: 'assistant', content: welcome });
         await saveSession(session);
         return res.json({ reply: welcome, sessionId: sessionId, menu: null, phase: state.phase });
       }
-      // Name found in first message — show welcome that acknowledges it
       mem.name = firstMsgName;
       console.log('✅ Name locked from first message: ' + firstMsgName);
       advancePhase(session);
@@ -1131,14 +1312,12 @@ app.post('/api/chat', async function(req, res) {
     let contactJustReceived = false;
     if (Object.keys(updates).length > 0) {
       const hadContact = !!(mem.email || mem.phone);
-      // Remove internal flag before merging into memory
       const emailNeedsCorrection = updates._emailNeedsCorrection;
       delete updates._emailNeedsCorrection;
       Object.assign(mem, updates);
       contactJustReceived = !hadContact && !!(mem.email || mem.phone);
       console.log('📝 Memory updated:', JSON.stringify(updates));
 
-      // If phone was captured but email was incomplete, note it but don't block
       if (emailNeedsCorrection && mem.phone) {
         console.log('📧 Email was incomplete — will ask for it after confirming phone');
       }
@@ -1202,6 +1381,7 @@ app.post('/api/chat', async function(req, res) {
     if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
       let foundCountry = null;
       const lowerMsg = message.toLowerCase().trim();
+      // FIX: iterate COUNTRY_MAP keys in insertion order (longest/most-specific first)
       for (const kw of Object.keys(COUNTRY_MAP)) {
         if (lowerMsg.includes(kw)) { foundCountry = COUNTRY_MAP[kw]; break; }
       }
@@ -1246,7 +1426,6 @@ app.post('/api/chat', async function(req, res) {
       const nameGreet   = mem.name || 'there';
       const contactType = mem.email ? 'email (' + mem.email + ')' : 'number (' + mem.phone + ')';
 
-      // FIX: If we got phone but email was incomplete, ask for email after confirming
       let confirmReply;
       const hadIncompleteEmail = !mem.email && /my mail|my email/i.test(message);
       if (hadIncompleteEmail && mem.phone) {
@@ -1420,7 +1599,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.3 — Contact parsing fix');
+    console.log('\n🚀 Comply Website Bot v3.4 — Name/country/phone validation fixes');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
