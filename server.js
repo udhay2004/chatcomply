@@ -717,7 +717,7 @@ const SERVICE_MAP = {
 const EXPAND_INTENT_RE = /expand|incorporat|setup|set up|open|register|move|launch|start|going to|looking at|consider|want to|thinking about/i;
 const NEGATION_RE      = /\b(not|never|don't|won't|no longer|excluding|except|avoid|against|instead of)\b/i;
 
-async function extractEntities(msg, mem) {
+async function extractEntities(msg, mem, phase) {
   const lower   = msg.toLowerCase();
   const updates = {};
   const validationErrors = [];
@@ -780,7 +780,10 @@ async function extractEntities(msg, mem) {
   }
 
   // ── TARGET COUNTRIES — iterate longest keys first (COUNTRY_MAP is ordered) ──
-  if (!validationError && !NEGATION_RE.test(lower)) {
+  // Skip during onboarding_current_country: a short reply like "Thailand" is the user's
+  // base country, not their target market. Setting targetCountry here causes
+  // currentCountry === targetCountry in the lead record.
+  if (!validationError && !NEGATION_RE.test(lower) && phase !== 'onboarding_current_country') {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
       const hasExpandIntent = EXPAND_INTENT_RE.test(lower);
@@ -1243,21 +1246,32 @@ async function sendLeadEmail(session) {
 // ─────────────────────────────────────────────
 // ROLLING CONVERSATION SUMMARY
 // ─────────────────────────────────────────────
-async function maybeUpdateSummary(session) {
+async function maybeUpdateSummary(session, force) {
   const userMsgCount = session.history.filter(function(m) { return m.role === 'user'; }).length;
-  if (userMsgCount === 0 || userMsgCount % 5 !== 0) return;
+  // Always generate summary when contact is first captured (force=true),
+  // otherwise generate every 5 user messages. This ensures short sessions
+  // (which end at 4-5 messages) always get a summary written to the lead.
+  if (!force && (userMsgCount === 0 || userMsgCount % 5 !== 0)) return;
+  if (userMsgCount < 2) return; // need at least 2 messages to summarise
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001', max_tokens: 150,
-        messages: [{ role: 'user', content: 'Summarise this business expansion conversation in 2-3 sentences. Focus on: markets, services, decisions, concerns. Factual and concise. No bullets.\n\nConversation:\n' + session.history.slice(-10).map(function(m) { return (m.role==='user'?'User':'Advisor') + ': ' + m.content.substring(0,200); }).join('\n') }],
+        messages: [{ role: 'user', content: 'Summarise this business expansion conversation in 2-3 sentences. Focus on: name, markets, services, decisions, concerns. Factual and concise. No bullets.\n\nConversation:\n' + session.history.slice(-10).map(function(m) { return (m.role==='user'?'User':'Advisor') + ': ' + m.content.substring(0,200); }).join('\n') }],
       }),
     });
     const data    = await resp.json();
     const summary = (data.content && data.content[0] && data.content[0].text || '').trim();
-    if (summary) { session.memory.conversationSummary = summary; console.log('📝 Summary updated'); }
+    if (summary) {
+      session.memory.conversationSummary = summary;
+      console.log('📝 Summary updated:', summary.substring(0, 80));
+      // Write summary back to lead record immediately so it isn't lost
+      if (session.memory.email || session.memory.phone || session.memory.name) {
+        await saveLeadData(session, !!(session.memory.email || session.memory.phone));
+      }
+    }
   } catch (err) { console.error('❌ Summary failed:', err.message); }
 }
 
@@ -1300,7 +1314,7 @@ app.post('/api/chat', async function(req, res) {
     }
 
     // ── STEP 1: Entity extraction ──
-    const { updates, validationError } = await extractEntities(message, mem);
+    const { updates, validationError } = await extractEntities(message, mem, state.phase);
 
     if (validationError) {
       session.history.push({ role: 'user',      content: truncateMsg(message) });
@@ -1327,17 +1341,16 @@ app.post('/api/chat', async function(req, res) {
     if (!mem.name) {
       const n = extractName(message);
       if (n) {
-        mem.name = n;
+        mem.name = n;  // merge into mem FIRST, then save
         console.log('✅ Name locked: ' + n);
 
         if (state.phase === 'new' || state.phase === 'onboarding_name') {
           advancePhase(session);
-          await saveSession(session);
-          await saveLeadData(session, false);
           const nameReply = 'Nice to meet you, ' + n + '! 🌟\n\nWhere are you currently based? (e.g. India, UAE, USA, UK, Singapore)';
           session.history.push({ role: 'user', content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
           await saveSession(session);
+          await saveLeadData(session, false);  // name is already in mem now
           return res.json({ reply: nameReply, sessionId: sessionId, menu: null, phase: state.phase });
         }
         // Name captured during advisory — update lead
@@ -1440,6 +1453,8 @@ app.post('/api/chat', async function(req, res) {
       if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
       state.leadSaved = true;
       await saveSession(session);
+      // Force summary now — this is the most complete snapshot of the session
+      await maybeUpdateSummary(session, true);
       await saveLeadData(session, true);
       await appendToSheet(session);
       await sendLeadEmail(session);
