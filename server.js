@@ -202,6 +202,39 @@ async function saveSession(s) {
 }
 
 // ─────────────────────────────────────────────
+// PROGRESSIVE LEAD SAVE — NEW
+// Saves partial lead data after EVERY message turn, as long as we have
+// at least one useful piece of information (name, country, phone, email).
+// This ensures data is never lost if the user closes the tab mid-conversation.
+// ─────────────────────────────────────────────
+function hasAnyLeadData(mem) {
+  return !!(
+    mem.name ||
+    mem.email ||
+    mem.phone ||
+    mem.currentCountry ||
+    mem.targetCountry ||
+    (mem.targetCountries && mem.targetCountries.length > 0) ||
+    mem.serviceNeeded ||
+    (mem.servicesDiscussed && mem.servicesDiscussed.length > 0) ||
+    mem.companyName
+  );
+}
+
+// Non-blocking background save — fires and doesn't await in the hot path
+function triggerProgressiveSave(session) {
+  if (!hasAnyLeadData(session.memory)) return;
+  const isComplete = !!(session.memory.email || session.memory.phone);
+  setImmediate(async function() {
+    try {
+      await saveLeadData(session, isComplete);
+    } catch (err) {
+      console.warn('⚠️ triggerProgressiveSave error:', err.message);
+    }
+  });
+}
+
+// ─────────────────────────────────────────────
 // COUNTRY MAP
 // ─────────────────────────────────────────────
 const COUNTRY_MAP = {
@@ -518,16 +551,8 @@ function validatePhone(rawPhone, currentCountry) {
     }
     return { valid: true, reason: null, cleaned: '+' + digitsOnly };
   }
-  // ── LOCAL TRUNK PREFIX (leading 0, no +) ──────────────────────────────────
-  // Many countries use a leading 0 as a trunk prefix that is dropped when dialling
-  // internationally. Handle the most common ones by country context.
-  // UK:        07xxx = mobile, 01/02xxx = geographic — 11 digits total (0 + 10)
-  // Australia: 04xx  = mobile — 10 digits total (0 + 9)
-  // Germany:   0xxx  = variable, typically 10-12 digits with the 0
-  // France:    0x xx = 10 digits total (0 + 9)
-  // Netherlands: 06x = mobile, 10 digits total (0 + 9)
   if (digitsOnly.startsWith('0') && digitsOnly.length >= 9 && digitsOnly.length <= 12) {
-    const local = digitsOnly.slice(1); // strip trunk 0
+    const local = digitsOnly.slice(1);
     const CC_BY_COUNTRY = {
       'UK': '44', 'Australia': '61', 'Germany': '49', 'France': '33',
       'Netherlands': '31', 'Belgium': '32', 'Spain': '34', 'Italy': '39',
@@ -540,21 +565,16 @@ function validatePhone(rawPhone, currentCountry) {
     };
     const cc = currentCountry && CC_BY_COUNTRY[currentCountry];
     if (cc) {
-      const candidate = '+' + cc + local;
-      const candidateDigits = cc + local;
-      // Validate local digit count for this cc
       const rule = CC_LOCAL_DIGITS[cc];
       let lengthOk = true;
       if (typeof rule === 'number') lengthOk = local.length === rule;
       else if (Array.isArray(rule)) lengthOk = local.length >= rule[0] && local.length <= rule[1];
       if (lengthOk) {
         if (/^(.)\1+$/.test(local)) return { valid: false, reason: 'placeholder', cleaned: null };
-        console.log('🔧 Auto-expanded trunk prefix: "' + digitsOnly + '" → "' + candidate + '"');
-        return { valid: true, reason: null, cleaned: candidate };
+        console.log('🔧 Auto-expanded trunk prefix: "' + digitsOnly + '" → "+' + cc + local + '"');
+        return { valid: true, reason: null, cleaned: '+' + cc + local };
       }
     }
-    // Even without country context, a number like 07911123456 (UK mobile pattern)
-    // is clearly a UK number — handle it heuristically
     if (digitsOnly.length === 11 && digitsOnly.startsWith('07')) {
       const candidate = '+44' + local;
       if (!/^(.)\1+$/.test(local)) {
@@ -570,8 +590,6 @@ function validatePhone(rawPhone, currentCountry) {
       }
     }
   }
-  // ─────────────────────────────────────────────────────────────────────────
-
   if (digitsOnly.length === 10 && /^[2-9]/.test(digitsOnly)) return { valid: false, reason: 'missing_country_code', cleaned: null };
   if (digitsOnly.length < 8)  return { valid: false, reason: 'too_short', cleaned: null };
   if (digitsOnly.length > 15) return { valid: false, reason: 'too_long',  cleaned: null };
@@ -710,9 +728,6 @@ async function extractEntities(msg, mem, phase) {
   }
 
   // ── TARGET COUNTRIES ──
-  // CRITICAL FIX: Skip if phase is onboarding_current_country.
-  // Also skip if the only country found matches the user's current (base) country —
-  // that means the user is describing where they ARE, not where they want to expand.
   if (!validationError && !NEGATION_RE.test(lower) && phase !== 'onboarding_current_country') {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
@@ -720,9 +735,6 @@ async function extractEntities(msg, mem, phase) {
       const isShortReply = lower.trim().length <= 40;
       if (hasCountry && (hasExpandIntent || isShortReply)) {
         const country  = COUNTRY_MAP[kw];
-        // FIX: Do NOT store a country as targetCountry if it matches the user's
-        // known current/base country and there is no explicit expansion intent.
-        // This prevents "India" from getting stored as both currentCountry AND targetCountry.
         if (country === mem.currentCountry && !hasExpandIntent) {
           console.log('⏭️ Skipping targetCountry update — "' + country + '" matches currentCountry and no expand intent');
           break;
@@ -730,10 +742,6 @@ async function extractEntities(msg, mem, phase) {
         const existing = mem.targetCountries || [];
         if (!existing.includes(country)) {
           updates.targetCountries = existing.concat([country]);
-          // FIX: targetCountry = the newly detected expansion country, NOT [0].
-          // [0] would be whatever was first added (often the base/current country
-          // that snuck in during onboarding), causing currentCountry === targetCountry.
-          // The most recently mentioned expansion market is always the right primary.
           updates.targetCountry = country;
         }
         break;
@@ -1054,17 +1062,13 @@ function checkMemoryRecall(msg, session) {
 }
 
 // ─────────────────────────────────────────────
-// SUMMARY-BASED LEAD ENRICHMENT  ← NEW
-// Called after a summary is generated whenever key fields are still missing.
-// Uses a fast Haiku call to parse name / targetCountry / serviceNeeded
-// from the free-text summary. Only fills nulls — never overwrites real data.
+// SUMMARY-BASED LEAD ENRICHMENT
 // ─────────────────────────────────────────────
 async function enrichLeadFromSummary(session) {
   const mem = session.memory;
   const summary = mem.conversationSummary;
   if (!summary || summary.length < 20) return;
 
-  // Only run if at least one key field is missing
   const needsName    = !mem.name;
   const needsTarget  = !mem.targetCountry && (!mem.targetCountries || mem.targetCountries.length === 0);
   const needsService = !mem.serviceNeeded && (!mem.servicesDiscussed || mem.servicesDiscussed.length === 0);
@@ -1108,9 +1112,7 @@ Respond with ONLY this JSON (no backticks, no preamble):
     }
 
     if (needsTarget && parsed.targetCountry && typeof parsed.targetCountry === 'string') {
-      // Validate it's a real country we know, or just trust the model
       const canonical = COUNTRY_MAP[parsed.targetCountry.toLowerCase()] || parsed.targetCountry;
-      // Don't set targetCountry if it matches currentCountry (the base country confusion bug)
       if (canonical !== mem.currentCountry) {
         mem.targetCountry   = canonical;
         mem.targetCountries = [canonical];
@@ -1132,11 +1134,10 @@ Respond with ONLY this JSON (no backticks, no preamble):
     }
 
     if (changed) {
-      cSet(session.sessionId, session); // refresh cache with enriched data
+      cSet(session.sessionId, session);
     }
   } catch (err) {
     console.warn('⚠️ enrichLeadFromSummary failed:', err.message);
-    // Non-fatal — we just skip enrichment
   }
 }
 
@@ -1155,41 +1156,28 @@ async function saveLeadData(session, isComplete) {
   }
   const mem   = session.memory;
   const state = session.state;
-  const currentName = session.memory.name || null;
 
-  if (!currentName && !mem.email && !mem.phone) {
-    console.log('⏭️ Skipping lead save — no name/email/phone yet');
+  // ── SAVE THRESHOLD: at least one meaningful field ──────────────────────────
+  // Previously this required name+email+phone. Now we save as soon as we have
+  // ANY data worth keeping — name alone, country alone, etc.
+  if (!mem.name && !mem.email && !mem.phone && !mem.currentCountry &&
+      !mem.targetCountry && !(mem.targetCountries && mem.targetCountries.length) &&
+      !mem.serviceNeeded && !(mem.servicesDiscussed && mem.servicesDiscussed.length)) {
+    console.log('⏭️ Skipping lead save — no data yet');
     return;
   }
 
-  // ── ENRICHMENT PASS ──────────────────────────────────────────────────────
-  // Before writing to DB, attempt to fill any missing fields from the summary.
-  // This is the safety net that catches cases where live extraction missed
-  // the name or target country (e.g. Irene/Venezuela scenario).
-  await enrichLeadFromSummary(session);
-  // Re-read after enrichment (enrichLeadFromSummary mutates session.memory directly)
-  const enrichedName          = session.memory.name          || null;
-  const enrichedTargetCountry = session.memory.targetCountry || null;
-  const enrichedTargetCountries = session.memory.targetCountries && session.memory.targetCountries.length
-    ? session.memory.targetCountries
-    : (enrichedTargetCountry ? [enrichedTargetCountry] : []);
-  const enrichedServiceNeeded   = session.memory.serviceNeeded   || null;
-  const enrichedServicesDiscussed = session.memory.servicesDiscussed && session.memory.servicesDiscussed.length
-    ? session.memory.servicesDiscussed
-    : (enrichedServiceNeeded ? [enrichedServiceNeeded] : []);
-  // ─────────────────────────────────────────────────────────────────────────
-
   const leadData = {
-    name:                enrichedName,
-    email:               mem.email              || null,
-    phone:               mem.phone              || null,
-    companyName:         mem.companyName        || null,
-    currentCountry:      mem.currentCountry     || null,
-    targetCountry:       enrichedTargetCountry,
-    targetCountries:     enrichedTargetCountries,
-    serviceNeeded:       enrichedServiceNeeded,
-    servicesDiscussed:   enrichedServicesDiscussed,
-    topicsDiscussed:     state.topicsDiscussed  || [],
+    name:                mem.name              || null,
+    email:               mem.email             || null,
+    phone:               mem.phone             || null,
+    companyName:         mem.companyName       || null,
+    currentCountry:      mem.currentCountry    || null,
+    targetCountry:       mem.targetCountry     || null,
+    targetCountries:     (mem.targetCountries && mem.targetCountries.length) ? mem.targetCountries : (mem.targetCountry ? [mem.targetCountry] : []),
+    serviceNeeded:       mem.serviceNeeded     || null,
+    servicesDiscussed:   (mem.servicesDiscussed && mem.servicesDiscussed.length) ? mem.servicesDiscussed : (mem.serviceNeeded ? [mem.serviceNeeded] : []),
+    topicsDiscussed:     state.topicsDiscussed || [],
     conversationSummary: mem.conversationSummary || '',
     sessionId:           session.sessionId,
     source:              'website',
@@ -1215,10 +1203,10 @@ async function saveLeadData(session, isComplete) {
       }
       merged.lastUpdated = new Date();
       await leadsCol.replaceOne({ _id: existing._id }, merged);
-      console.log('✅ Lead upserted: ' + (enrichedName || 'no-name') + ' | ' + (mem.email || mem.phone || session.sessionId.slice(-6)));
+      console.log('✅ Lead upserted: ' + (mem.name || 'no-name') + ' | ' + (mem.email || mem.phone || session.sessionId.slice(-6)));
     } else {
       await leadsCol.insertOne(Object.assign({}, leadData, { createdAt: new Date() }));
-      console.log('✅ Lead created: ' + (enrichedName || session.sessionId.slice(-6)));
+      console.log('✅ Lead created: ' + (mem.name || session.sessionId.slice(-6)));
     }
   } catch (err) {
     console.error('❌ saveLeadData error:', err.message);
@@ -1331,6 +1319,8 @@ app.post('/api/chat', async function(req, res) {
         const welcome = 'Hi there! 👋 Welcome to Comply Globally.\n\nI\'m your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
         session.history.push({ role: 'assistant', content: welcome });
         await saveSession(session);
+        // ── PROGRESSIVE SAVE: even on first message if any entity was detected ──
+        triggerProgressiveSave(session);
         return res.json({ reply: welcome, sessionId: sessionId, menu: null, phase: state.phase });
       }
       mem.name = firstMsgName;
@@ -1340,7 +1330,8 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(nameWelcome) });
       await saveSession(session);
-      await saveLeadData(session, false);
+      // ── PROGRESSIVE SAVE: name just captured ──
+      triggerProgressiveSave(session);
       return res.json({ reply: nameWelcome, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
@@ -1351,6 +1342,8 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user',      content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(validationError.message) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE: even on validation error, save what we have ──
+      triggerProgressiveSave(session);
       return res.json({ reply: validationError.message, sessionId: sessionId, menu: null, phase: state.phase, validationFailed: true });
     }
 
@@ -1381,10 +1374,12 @@ app.post('/api/chat', async function(req, res) {
           session.history.push({ role: 'user', content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
           await saveSession(session);
-          await saveLeadData(session, false);
+          // ── PROGRESSIVE SAVE ──
+          triggerProgressiveSave(session);
           return res.json({ reply: nameReply, sessionId: sessionId, menu: null, phase: state.phase });
         }
-        await saveLeadData(session, isLeadSaveable(mem));
+        // ── PROGRESSIVE SAVE: name captured mid-conversation ──
+        triggerProgressiveSave(session);
       }
     }
 
@@ -1404,8 +1399,9 @@ app.post('/api/chat', async function(req, res) {
       if (foundCC) {
         mem.currentCountry = foundCC;
         advancePhase(session);
+        // ── PROGRESSIVE SAVE: country captured ──
+        triggerProgressiveSave(session);
         await saveSession(session);
-        await saveLeadData(session, false);
         const r = 'Got it, ' + mem.name + '! 🌍\n\nAnd which country or market are you looking to expand into? (e.g. UAE, Singapore, USA, UK, Canada)';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1428,7 +1424,6 @@ app.post('/api/chat', async function(req, res) {
         if (lowerMsg.includes(kw)) { foundCountry = COUNTRY_MAP[kw]; break; }
       }
 
-      // ── FIX: If user types their own base country as the target, prompt again ──
       if (foundCountry && foundCountry === mem.currentCountry) {
         const r = 'It looks like ' + foundCountry + ' is where you\'re currently based, ' + mem.name + '. Which country are you looking to *expand into*? For example: UAE, Singapore, USA, UK, Canada, or another market.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
@@ -1441,8 +1436,9 @@ app.post('/api/chat', async function(req, res) {
         mem.targetCountry   = foundCountry;
         mem.targetCountries = [foundCountry];
         advancePhase(session);
+        // ── PROGRESSIVE SAVE: target country captured ──
+        triggerProgressiveSave(session);
         await saveSession(session);
-        await saveLeadData(session, false);
         const r = 'Great choice, ' + mem.name + '! ' + foundCountry + ' is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email or WhatsApp number? Please include the country code for your phone (e.g. +91 98765 43210 for India, +1 415 555 0100 for USA, +971 50 123 4567 for UAE). Our team will use it to send you a custom quote and specific insights for ' + foundCountry + '.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1469,6 +1465,8 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(finalReply) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE: save whatever we have at contact gate ──
+      triggerProgressiveSave(session);
       return res.json({ reply: finalReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
@@ -1520,6 +1518,8 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(memoryReply) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE ──
+      triggerProgressiveSave(session);
       return res.json({ reply: memoryReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
@@ -1549,8 +1549,9 @@ app.post('/api/chat', async function(req, res) {
       }
       await saveLeadData(session, true);
       await appendToSheet(session);
-    } else if (mem.name || mem.currentCountry || mem.targetCountry) {
-      await saveLeadData(session, false);
+    } else {
+      // ── PROGRESSIVE SAVE: always save if we have any data, not just name/country/target ──
+      triggerProgressiveSave(session);
     }
 
     await saveSession(session);
@@ -1644,13 +1645,6 @@ app.post('/backfill-names', async function(req, res) {
   } catch (err) { res.json({ success: false, error: err.message }); }
 });
 
-// ─────────────────────────────────────────────
-// BACKFILL ENDPOINT — re-enrich existing leads from their summary  ← NEW
-// POST /backfill-enrich
-// Iterates all leads where name or targetCountry is missing,
-// pulls the matching session, and runs enrichLeadFromSummary() on it.
-// Safe to run multiple times — only fills nulls, never overwrites.
-// ─────────────────────────────────────────────
 app.post('/backfill-enrich', async function(req, res) {
   const ready = await ensureMongo();
   if (!ready || !leadsCol || !sessionsCol) return res.json({ error: 'MongoDB not connected' });
@@ -1668,7 +1662,6 @@ app.post('/backfill-enrich', async function(req, res) {
       if (lead.sessionId) sessionDoc = await sessionsCol.findOne({ sessionId: lead.sessionId });
       if (!sessionDoc) continue;
 
-      // Rebuild a minimal session object that enrichLeadFromSummary can work with
       const fakeSession = {
         sessionId: lead.sessionId,
         memory: Object.assign({
@@ -1720,7 +1713,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.5 — Summary-based lead enrichment + target country fix');
+    console.log('\n🚀 Comply Website Bot v3.6 — Progressive lead save on every turn');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
