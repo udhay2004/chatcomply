@@ -202,7 +202,7 @@ async function saveSession(s) {
 }
 
 // ─────────────────────────────────────────────
-// PROGRESSIVE LEAD SAVE
+// PROGRESSIVE LEAD SAVE — NEW
 // Saves partial lead data after EVERY message turn, as long as we have
 // at least one useful piece of information (name, country, phone, email).
 // This ensures data is never lost if the user closes the tab mid-conversation.
@@ -365,22 +365,9 @@ const NAME_BLACKLIST = new Set([
   'basically','essentially','specifically','particularly','primarily','mainly',
 ]);
 
-// ─────────────────────────────────────────────
-// FIX 1: NAME_STANDALONE_RE now accepts any case (lower, upper, mixed)
-// Previously was /^([A-Z][a-z].../ which silently dropped 'rahul', 'john', 'amit gupta'
-// ─────────────────────────────────────────────
 const NAME_INTRO_RE      = /(?:my name is|this is|you can call me|they call me|i am|i'm|im)\s+([A-Za-z][a-zA-Z'\-]{1,30}(?:\s+[A-Za-z][a-zA-Z'\-]{1,30}){0,2})/i;
-const NAME_STANDALONE_RE = /^([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
+const NAME_STANDALONE_RE = /^([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
-
-// ─────────────────────────────────────────────
-// FIX 2: toTitleCase helper — normalizes 'rahul' → 'Rahul', 'amit gupta' → 'Amit Gupta'
-// ─────────────────────────────────────────────
-function toTitleCase(str) {
-  return str.split(/\s+/).map(function(w) {
-    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
-  }).join(' ');
-}
 
 function extractName(msg) {
   const t = msg.trim();
@@ -399,7 +386,7 @@ function extractName(msg) {
     const words = candidate.split(/\s+/);
     if (words.length <= 3 && words.every(function(w) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);  // FIX 2 applied: normalize to TitleCase
+    })) return candidate;
   }
 
   const standalone = t.match(NAME_STANDALONE_RE);
@@ -408,7 +395,7 @@ function extractName(msg) {
     const words = candidate.split(/\s+/);
     if (words.length >= 1 && words.length <= 3 && words.every(function(w) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);  // FIX 2 applied: normalize to TitleCase
+    })) return candidate;
   }
   return null;
 }
@@ -1119,7 +1106,7 @@ Respond with ONLY this JSON (no backticks, no preamble):
     let changed = false;
 
     if (needsName && parsed.name && typeof parsed.name === 'string' && parsed.name.length >= 2) {
-      mem.name = toTitleCase(parsed.name);  // FIX 2 applied: normalize enriched names too
+      mem.name = parsed.name;
       console.log('✅ Enriched name from summary: ' + mem.name);
       changed = true;
     }
@@ -1170,7 +1157,9 @@ async function saveLeadData(session, isComplete) {
   const mem   = session.memory;
   const state = session.state;
 
-  // Save threshold: at least one meaningful field
+  // ── SAVE THRESHOLD: at least one meaningful field ──────────────────────────
+  // Previously this required name+email+phone. Now we save as soon as we have
+  // ANY data worth keeping — name alone, country alone, etc.
   if (!mem.name && !mem.email && !mem.phone && !mem.currentCountry &&
       !mem.targetCountry && !(mem.targetCountries && mem.targetCountries.length) &&
       !mem.serviceNeeded && !(mem.servicesDiscussed && mem.servicesDiscussed.length)) {
@@ -1330,18 +1319,19 @@ app.post('/api/chat', async function(req, res) {
         const welcome = 'Hi there! 👋 Welcome to Comply Globally.\n\nI\'m your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
         session.history.push({ role: 'assistant', content: welcome });
         await saveSession(session);
+        // ── PROGRESSIVE SAVE: even on first message if any entity was detected ──
         triggerProgressiveSave(session);
         return res.json({ reply: welcome, sessionId: sessionId, menu: null, phase: state.phase });
       }
       mem.name = firstMsgName;
       console.log('✅ Name locked from first message: ' + firstMsgName);
-      // ── FIX 3: Save immediately when name is captured on first message ──
-      triggerProgressiveSave(session);
       advancePhase(session);
       const nameWelcome = 'Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '!\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhere are you currently based? This helps me understand your starting point for any international expansion plans.';
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(nameWelcome) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE: name just captured ──
+      triggerProgressiveSave(session);
       return res.json({ reply: nameWelcome, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
@@ -1352,6 +1342,7 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user',      content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(validationError.message) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE: even on validation error, save what we have ──
       triggerProgressiveSave(session);
       return res.json({ reply: validationError.message, sessionId: sessionId, menu: null, phase: state.phase, validationFailed: true });
     }
@@ -1383,9 +1374,11 @@ app.post('/api/chat', async function(req, res) {
           session.history.push({ role: 'user', content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
           await saveSession(session);
+          // ── PROGRESSIVE SAVE ──
           triggerProgressiveSave(session);
           return res.json({ reply: nameReply, sessionId: sessionId, menu: null, phase: state.phase });
         }
+        // ── PROGRESSIVE SAVE: name captured mid-conversation ──
         triggerProgressiveSave(session);
       }
     }
@@ -1406,6 +1399,7 @@ app.post('/api/chat', async function(req, res) {
       if (foundCC) {
         mem.currentCountry = foundCC;
         advancePhase(session);
+        // ── PROGRESSIVE SAVE: country captured ──
         triggerProgressiveSave(session);
         await saveSession(session);
         const r = 'Got it, ' + mem.name + '! 🌍\n\nAnd which country or market are you looking to expand into? (e.g. UAE, Singapore, USA, UK, Canada)';
@@ -1418,8 +1412,6 @@ app.post('/api/chat', async function(req, res) {
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
         await saveSession(session);
-        // ── FIX 3: Save even when country isn't recognized yet — we still have the name ──
-        triggerProgressiveSave(session);
         return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
       }
     }
@@ -1433,8 +1425,6 @@ app.post('/api/chat', async function(req, res) {
       }
 
       if (foundCountry && foundCountry === mem.currentCountry) {
-        // ── FIX 3: Save before returning — we have name + currentCountry at minimum ──
-        triggerProgressiveSave(session);
         const r = 'It looks like ' + foundCountry + ' is where you\'re currently based, ' + mem.name + '. Which country are you looking to *expand into*? For example: UAE, Singapore, USA, UK, Canada, or another market.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1446,6 +1436,7 @@ app.post('/api/chat', async function(req, res) {
         mem.targetCountry   = foundCountry;
         mem.targetCountries = [foundCountry];
         advancePhase(session);
+        // ── PROGRESSIVE SAVE: target country captured ──
         triggerProgressiveSave(session);
         await saveSession(session);
         const r = 'Great choice, ' + mem.name + '! ' + foundCountry + ' is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email or WhatsApp number? Please include the country code for your phone (e.g. +91 98765 43210 for India, +1 415 555 0100 for USA, +971 50 123 4567 for UAE). Our team will use it to send you a custom quote and specific insights for ' + foundCountry + '.';
@@ -1454,8 +1445,6 @@ app.post('/api/chat', async function(req, res) {
         await saveSession(session);
         return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
       } else {
-        // ── FIX 3: Save even when target country isn't recognized — we have name + currentCountry ──
-        triggerProgressiveSave(session);
         const r = 'Which market are you looking to expand into, ' + mem.name + '? For example: UAE, Singapore, UK, USA, or Canada.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1476,6 +1465,7 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(finalReply) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE: save whatever we have at contact gate ──
       triggerProgressiveSave(session);
       return res.json({ reply: finalReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
@@ -1528,6 +1518,7 @@ app.post('/api/chat', async function(req, res) {
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(memoryReply) });
       await saveSession(session);
+      // ── PROGRESSIVE SAVE ──
       triggerProgressiveSave(session);
       return res.json({ reply: memoryReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
@@ -1559,6 +1550,7 @@ app.post('/api/chat', async function(req, res) {
       await saveLeadData(session, true);
       await appendToSheet(session);
     } else {
+      // ── PROGRESSIVE SAVE: always save if we have any data, not just name/country/target ──
       triggerProgressiveSave(session);
     }
 
@@ -1721,7 +1713,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.7 — Lowercase names + real-time progressive save');
+    console.log('\n🚀 Comply Website Bot v3.6 — Progressive lead save on every turn');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
