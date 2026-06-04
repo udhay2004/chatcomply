@@ -365,7 +365,10 @@ const NAME_BLACKLIST = new Set([
   'basically','essentially','specifically','particularly','primarily','mainly',
 ]);
 
-const NAME_INTRO_RE      = /(?:my name is|this is|you can call me|they call me|i am|i'm|im)\s+([A-Za-z][a-zA-Z'\-]{1,30}(?:\s+[A-Za-z][a-zA-Z'\-]{1,30}){0,2})/i;
+const NAME_STANDALONE_RE = /^([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
+function toTitleCase(str) {
+  return str.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+}
 const NAME_STANDALONE_RE = /^([A-Z][a-z]{1,20}(?:\s+[A-Z][a-z]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
 
