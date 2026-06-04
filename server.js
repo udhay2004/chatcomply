@@ -364,12 +364,17 @@ const NAME_BLACKLIST = new Set([
   'basically','essentially','specifically','particularly','primarily','mainly',
 ]);
 
+// ── FIX 1: toTitleCase helper ──────────────────────────────────────────────
 function toTitleCase(str) {
   return str.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
+// ── FIX 2: NAME_INTRO_RE — matches "I'm Rahul", "my name is pooja", "this is amit", etc. ──
 const NAME_INTRO_RE = /^(?:(?:i(?:'m| am|m)|this is|it's|its|call me|name'?s?|hi i'm|hey i'm|hello i'm|my name is|name is|name:)\s+)([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*[.!]?\s*$/i;
+
+// ── FIX 3: NAME_STANDALONE_RE — accepts any case (single declaration, no duplicate) ──
 const NAME_STANDALONE_RE = /^([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
+
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
 
 function extractName(msg) {
@@ -383,22 +388,24 @@ function extractName(msg) {
   if (/\d/.test(t)) return null;
   if (/@/.test(t) || /my mail|my email|my number|my phone|whatsapp/i.test(lower)) return null;
 
+  // ── intro pattern (e.g. "I'm rahul", "my name is pooja", "this is amit gupta") ──
   const intro = t.match(NAME_INTRO_RE);
   if (intro) {
     const candidate = intro[1].trim();
     const words = candidate.split(/\s+/);
     if (words.length <= 3 && words.every(function(w) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);
+    })) return toTitleCase(candidate);  // ← FIX: normalize to Title Case
   }
 
+  // ── standalone name (e.g. "rahul", "pooja sharma", "amit gupta") ──
   const standalone = t.match(NAME_STANDALONE_RE);
   if (standalone) {
     const candidate = standalone[1].trim();
     const words = candidate.split(/\s+/);
     if (words.length >= 1 && words.length <= 3 && words.every(function(w) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);
+    })) return toTitleCase(candidate);  // ← FIX: normalize to Title Case
   }
   return null;
 }
@@ -1160,6 +1167,7 @@ async function saveLeadData(session, isComplete) {
   const mem   = session.memory;
   const state = session.state;
 
+  // Save threshold: at least one meaningful field
   if (!mem.name && !mem.email && !mem.phone && !mem.currentCountry &&
       !mem.targetCountry && !(mem.targetCountries && mem.targetCountries.length) &&
       !mem.serviceNeeded && !(mem.servicesDiscussed && mem.servicesDiscussed.length)) {
@@ -1211,74 +1219,6 @@ async function saveLeadData(session, isComplete) {
   } catch (err) {
     console.error('❌ saveLeadData error:', err.message);
   }
-}
-
-// ─────────────────────────────────────────────
-// ★ NEW: IMMEDIATE TARGET COUNTRY SAVE
-// Writes targetCountry to the lead record the moment it is captured,
-// without waiting for contact info to be provided.
-// ─────────────────────────────────────────────
-async function saveTargetCountryToLead(session) {
-  const ready = await ensureMongo();
-  if (!ready || !leadsCol) return;
-  const mem = session.memory;
-  if (!mem.targetCountry) return;
-
-  try {
-    const query = mem.email
-      ? { email: mem.email }
-      : mem.phone
-        ? { phone: mem.phone }
-        : { sessionId: session.sessionId };
-
-    const existing = await leadsCol.findOne(query);
-
-    const updateFields = {
-      targetCountry:   mem.targetCountry,
-      targetCountries: mem.targetCountries && mem.targetCountries.length ? mem.targetCountries : [mem.targetCountry],
-      lastUpdated:     new Date(),
-    };
-    // Carry name and currentCountry too if we have them (they may not be in the lead yet)
-    if (mem.name)           updateFields.name           = mem.name;
-    if (mem.currentCountry) updateFields.currentCountry = mem.currentCountry;
-
-    if (existing) {
-      await leadsCol.updateOne({ _id: existing._id }, { $set: updateFields });
-      console.log('🌍 targetCountry updated in lead: ' + mem.targetCountry);
-    } else {
-      // No lead record yet — create a minimal partial one so the country isn't lost
-      await leadsCol.insertOne(Object.assign({
-        name:                mem.name           || null,
-        email:               mem.email          || null,
-        phone:               mem.phone          || null,
-        companyName:         mem.companyName    || null,
-        currentCountry:      mem.currentCountry || null,
-        serviceNeeded:       mem.serviceNeeded  || null,
-        servicesDiscussed:   mem.servicesDiscussed && mem.servicesDiscussed.length ? mem.servicesDiscussed : [],
-        topicsDiscussed:     session.state.topicsDiscussed || [],
-        conversationSummary: mem.conversationSummary || '',
-        sessionId:           session.sessionId,
-        source:              'website',
-        partial:             true,
-        createdAt:           new Date(),
-      }, updateFields));
-      console.log('🌍 Partial lead created with targetCountry: ' + mem.targetCountry);
-    }
-  } catch (err) {
-    console.error('❌ saveTargetCountryToLead error:', err.message);
-  }
-}
-
-// Non-blocking wrapper — same pattern as triggerProgressiveSave
-function triggerTargetCountrySave(session) {
-  if (!session.memory.targetCountry) return;
-  setImmediate(async function() {
-    try {
-      await saveTargetCountryToLead(session);
-    } catch (err) {
-      console.warn('⚠️ triggerTargetCountrySave error:', err.message);
-    }
-  });
 }
 
 async function appendToSheet(session) {
@@ -1392,7 +1332,7 @@ app.post('/api/chat', async function(req, res) {
       }
       mem.name = firstMsgName;
       console.log('✅ Name locked from first message: ' + firstMsgName);
-      triggerProgressiveSave(session);
+      triggerProgressiveSave(session);  // ← save name immediately
       advancePhase(session);
       const nameWelcome = 'Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '!\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhere are you currently based? This helps me understand your starting point for any international expansion plans.';
       session.history.push({ role: 'user', content: truncateMsg(message) });
@@ -1415,18 +1355,10 @@ app.post('/api/chat', async function(req, res) {
     let contactJustReceived = false;
     if (Object.keys(updates).length > 0) {
       const hadContact = !!(mem.email || mem.phone);
-      const hadTargetCountry = !!mem.targetCountry;                        // ★ track before merge
       const emailNeedsCorrection = updates._emailNeedsCorrection;
       delete updates._emailNeedsCorrection;
       Object.assign(mem, updates);
       contactJustReceived = !hadContact && !!(mem.email || mem.phone);
-
-      // ★ If targetCountry was just set via extractEntities (e.g. in advisory phase),
-      //   immediately persist it to the lead record so it's never lost.
-      if (!hadTargetCountry && mem.targetCountry) {
-        triggerTargetCountrySave(session);
-      }
-
       console.log('📝 Memory updated:', JSON.stringify(updates));
 
       if (emailNeedsCorrection && mem.phone) {
@@ -1494,8 +1426,9 @@ app.post('/api/chat', async function(req, res) {
         if (lowerMsg.includes(kw)) { foundCountry = COUNTRY_MAP[kw]; break; }
       }
 
+      // ── FIX 4: triggerProgressiveSave added to same-country guard ──
       if (foundCountry && foundCountry === mem.currentCountry) {
-        triggerProgressiveSave(session);
+        triggerProgressiveSave(session);  // save name+currentCountry even when re-asking
         const r = 'It looks like ' + foundCountry + ' is where you\'re currently based, ' + mem.name + '. Which country are you looking to *expand into*? For example: UAE, Singapore, USA, UK, Canada, or another market.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1508,7 +1441,6 @@ app.post('/api/chat', async function(req, res) {
         mem.targetCountries = [foundCountry];
         advancePhase(session);
         triggerProgressiveSave(session);
-        triggerTargetCountrySave(session);   // ★ immediately persist target country
         await saveSession(session);
         const r = 'Great choice, ' + mem.name + '! ' + foundCountry + ' is an excellent market for expansion. 🌍\n\nBefore we dive deeper, could I grab your email or WhatsApp number? Please include the country code for your phone (e.g. +91 98765 43210 for India, +1 415 555 0100 for USA, +971 50 123 4567 for UAE). Our team will use it to send you a custom quote and specific insights for ' + foundCountry + '.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
@@ -1781,7 +1713,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.8 — Immediate targetCountry persistence fix');
+    console.log('\n🚀 Comply Website Bot v3.7 — Lowercase name fix + progressive save on every turn');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
