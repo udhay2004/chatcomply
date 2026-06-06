@@ -1020,6 +1020,7 @@ async function callClaude(session, userMessage, kbSection, phaseHint) {
 // ─────────────────────────────────────────────
 // PHASE ADVANCEMENT
 // ─────────────────────────────────────────────
+// REPLACE the entire advancePhase function with this:
 function advancePhase(session) {
   const mem   = session.memory;
   const state = session.state;
@@ -1032,7 +1033,7 @@ function advancePhase(session) {
     return;
   }
   if (state.phase === 'onboarding_country') {
-    if (mem.targetCountry || mem.targetCountries.length > 0) {
+    if (mem.targetCountry || (mem.targetCountries && mem.targetCountries.length > 0)) {
       state.phase = (mem.email || mem.phone) ? 'advisory' : 'onboarding_contact';
     }
     return;
@@ -1387,6 +1388,7 @@ app.post('/api/chat', async function(req, res) {
     }
 
     // ── STEP 2b: Current country ──
+    // ── STEP 2b: Current country ──
     if (mem.name && !mem.currentCountry && state.phase === 'onboarding_current_country') {
       let foundCC = null;
       const lowerMsg = message.toLowerCase().trim();
@@ -1401,9 +1403,14 @@ app.post('/api/chat', async function(req, res) {
 
       if (foundCC) {
         mem.currentCountry = foundCC;
+        // Clear any targetCountry that extractEntities may have set from
+        // this same message — it belongs to the NEXT onboarding step
+        if (mem.targetCountry === foundCC) {
+          mem.targetCountry = null;
+          mem.targetCountries = [];
+        }
         advancePhase(session);
         triggerProgressiveSave(session);
-        await saveSession(session);
         const r = 'Got it, ' + mem.name + '! 🌍\n\nAnd which country or market are you looking to expand into? (e.g. UAE, Singapore, USA, UK, Canada)';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1417,6 +1424,7 @@ app.post('/api/chat', async function(req, res) {
         return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
       }
     }
+    
 
     // ── STEP 3: Target country ──
     if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
@@ -1473,6 +1481,7 @@ app.post('/api/chat', async function(req, res) {
     }
 
     // ── STEP 4b: Contact received ──
+    // ── STEP 4b: Contact received ──
     if (contactJustReceived && state.phase === 'onboarding_contact') {
       advancePhase(session);
       const nameGreet   = mem.name || 'there';
@@ -1491,11 +1500,22 @@ app.post('/api/chat', async function(req, res) {
       const menu = parseMenuFromReply(confirmReply);
       if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
       state.leadSaved = true;
+
+      // Save session first, then fire async operations
       await saveSession(session);
-      await maybeUpdateSummary(session, true);
-      await saveLeadData(session, true);
-      await appendToSheet(session);
-      await sendLeadEmail(session);
+
+      // Run summary update and lead saves in parallel — don't block the response
+      setImmediate(async function() {
+        try {
+          await maybeUpdateSummary(session, true);
+          await saveLeadData(session, true);
+          await appendToSheet(session);
+          await sendLeadEmail(session);
+        } catch (e) {
+          console.warn('⚠️ Post-contact async save error:', e.message);
+        }
+      });
+
       return res.json({ reply: confirmReply, sessionId: sessionId, menu: menu || null, phase: state.phase });
     }
 
