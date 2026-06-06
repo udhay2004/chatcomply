@@ -203,8 +203,6 @@ async function saveSession(s) {
 
 // ─────────────────────────────────────────────
 // PROGRESSIVE LEAD SAVE
-// Saves partial lead data after EVERY message turn, as long as we have
-// at least one useful piece of information (name, country, phone, email).
 // ─────────────────────────────────────────────
 function hasAnyLeadData(mem) {
   return !!(
@@ -220,7 +218,6 @@ function hasAnyLeadData(mem) {
   );
 }
 
-// Non-blocking background save — fires and doesn't await in the hot path
 function triggerProgressiveSave(session) {
   if (!hasAnyLeadData(session.memory)) return;
   const isComplete = !!(session.memory.email || session.memory.phone);
@@ -364,17 +361,12 @@ const NAME_BLACKLIST = new Set([
   'basically','essentially','specifically','particularly','primarily','mainly',
 ]);
 
-// ── FIX 1: toTitleCase helper ──────────────────────────────────────────────
 function toTitleCase(str) {
   return str.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 }
 
-// ── FIX 2: NAME_INTRO_RE — matches "I'm Rahul", "my name is pooja", "this is amit", etc. ──
 const NAME_INTRO_RE = /^(?:(?:i(?:'m| am|m)|this is|it's|its|call me|name'?s?|hi i'm|hey i'm|hello i'm|my name is|name is|name:)\s+)([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*[.!]?\s*$/i;
-
-// ── FIX 3: NAME_STANDALONE_RE — accepts any case (single declaration, no duplicate) ──
 const NAME_STANDALONE_RE = /^([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
-
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
 
 function extractName(msg) {
@@ -388,24 +380,22 @@ function extractName(msg) {
   if (/\d/.test(t)) return null;
   if (/@/.test(t) || /my mail|my email|my number|my phone|whatsapp/i.test(lower)) return null;
 
-  // ── intro pattern (e.g. "I'm rahul", "my name is pooja", "this is amit gupta") ──
   const intro = t.match(NAME_INTRO_RE);
   if (intro) {
     const candidate = intro[1].trim();
     const words = candidate.split(/\s+/);
     if (words.length <= 3 && words.every(function(w) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);  // ← FIX: normalize to Title Case
+    })) return toTitleCase(candidate);
   }
 
-  // ── standalone name (e.g. "rahul", "pooja sharma", "amit gupta") ──
   const standalone = t.match(NAME_STANDALONE_RE);
   if (standalone) {
     const candidate = standalone[1].trim();
     const words = candidate.split(/\s+/);
     if (words.length >= 1 && words.length <= 3 && words.every(function(w) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);  // ← FIX: normalize to Title Case
+    })) return toTitleCase(candidate);
   }
   return null;
 }
@@ -737,8 +727,11 @@ async function extractEntities(msg, mem, phase) {
     }
   }
 
-  // ── TARGET COUNTRIES ──
-  if (!validationError && !NEGATION_RE.test(lower) && phase !== 'onboarding_current_country') {
+  // ── TARGET COUNTRIES — only extract when NOT in current-country onboarding phase ──
+  if (!validationError && !NEGATION_RE.test(lower) &&
+      phase !== 'onboarding_current_country' &&
+      phase !== 'onboarding_name' &&
+      phase !== 'new') {
     for (const kw of Object.keys(COUNTRY_MAP)) {
       const hasCountry = lower.includes(kw);
       const hasExpandIntent = EXPAND_INTENT_RE.test(lower);
@@ -759,8 +752,11 @@ async function extractEntities(msg, mem, phase) {
     }
   }
 
-  // ── CURRENT COUNTRY ──
-  if (!mem.currentCountry && !validationError) {
+  // ── CURRENT COUNTRY — only extract when NOT in target-country onboarding phase ──
+  if (!mem.currentCountry && !validationError &&
+      phase !== 'onboarding_country' &&
+      phase !== 'onboarding_contact' &&
+      phase !== 'advisory') {
     if (/\b(indian|from india|based in india|india-based|indian founder|indian entrepreneur|i(?:'m| am) indian)\b/i.test(lower)) {
       updates.currentCountry = 'India';
     } else {
@@ -1020,7 +1016,6 @@ async function callClaude(session, userMessage, kbSection, phaseHint) {
 // ─────────────────────────────────────────────
 // PHASE ADVANCEMENT
 // ─────────────────────────────────────────────
-// REPLACE the entire advancePhase function with this:
 function advancePhase(session) {
   const mem   = session.memory;
   const state = session.state;
@@ -1040,6 +1035,55 @@ function advancePhase(session) {
   }
   if (state.phase === 'onboarding_contact') {
     if (mem.email || mem.phone) state.phase = 'advisory';
+    return;
+  }
+}
+
+// ─────────────────────────────────────────────
+// PHASE SELF-HEAL
+// Ensures phase always reflects actual memory state — prevents phase from
+// getting stuck if memory was updated out-of-band (e.g. by extractEntities).
+// ─────────────────────────────────────────────
+function healPhase(session) {
+  const mem   = session.memory;
+  const state = session.state;
+  const phase = state.phase;
+
+  // Already in advisory — nothing to heal
+  if (phase === 'advisory') return;
+
+  // If we have contact info and we're still in onboarding_contact, advance
+  if (phase === 'onboarding_contact' && (mem.email || mem.phone)) {
+    state.phase = 'advisory';
+    console.log('🔧 Phase healed: onboarding_contact → advisory');
+    return;
+  }
+
+  // If we have a target country and we're still in onboarding_country, advance
+  if (phase === 'onboarding_country' &&
+      (mem.targetCountry || (mem.targetCountries && mem.targetCountries.length > 0))) {
+    state.phase = (mem.email || mem.phone) ? 'advisory' : 'onboarding_contact';
+    console.log('🔧 Phase healed: onboarding_country → ' + state.phase);
+    return;
+  }
+
+  // If we have currentCountry and we're still in onboarding_current_country, advance
+  if (phase === 'onboarding_current_country' && mem.currentCountry) {
+    // Only advance if there's no target country yet
+    if (!mem.targetCountry && !(mem.targetCountries && mem.targetCountries.length > 0)) {
+      state.phase = 'onboarding_country';
+      console.log('🔧 Phase healed: onboarding_current_country → onboarding_country');
+    } else {
+      state.phase = (mem.email || mem.phone) ? 'advisory' : 'onboarding_contact';
+      console.log('🔧 Phase healed: onboarding_current_country → ' + state.phase);
+    }
+    return;
+  }
+
+  // If we have a name and we're in onboarding_name/new, advance
+  if ((phase === 'new' || phase === 'onboarding_name') && mem.name) {
+    state.phase = mem.currentCountry ? 'onboarding_country' : 'onboarding_current_country';
+    console.log('🔧 Phase healed: ' + phase + ' → ' + state.phase);
     return;
   }
 }
@@ -1155,10 +1199,6 @@ Respond with ONLY this JSON (no backticks, no preamble):
 // ─────────────────────────────────────────────
 // LEAD PERSISTENCE
 // ─────────────────────────────────────────────
-function isLeadSaveable(mem) {
-  return !!(mem.email || mem.phone);
-}
-
 async function saveLeadData(session, isComplete) {
   const ready = await ensureMongo();
   if (!ready || !leadsCol) {
@@ -1168,7 +1208,6 @@ async function saveLeadData(session, isComplete) {
   const mem   = session.memory;
   const state = session.state;
 
-  // Save threshold: at least one meaningful field
   if (!mem.name && !mem.email && !mem.phone && !mem.currentCountry &&
       !mem.targetCountry && !(mem.targetCountries && mem.targetCountries.length) &&
       !mem.serviceNeeded && !(mem.servicesDiscussed && mem.servicesDiscussed.length)) {
@@ -1296,7 +1335,8 @@ async function maybeUpdateSummary(session, force) {
     if (summary) {
       session.memory.conversationSummary = summary;
       console.log('📝 Summary updated:', summary.substring(0, 80));
-      if (session.memory.email || session.memory.phone || session.memory.name) {
+      // Always save lead after summary update if we have any data
+      if (hasAnyLeadData(session.memory)) {
         await saveLeadData(session, !!(session.memory.email || session.memory.phone));
       }
     }
@@ -1333,7 +1373,7 @@ app.post('/api/chat', async function(req, res) {
       }
       mem.name = firstMsgName;
       console.log('✅ Name locked from first message: ' + firstMsgName);
-      triggerProgressiveSave(session);  // ← save name immediately
+      triggerProgressiveSave(session);
       advancePhase(session);
       const nameWelcome = 'Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '!\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhere are you currently based? This helps me understand your starting point for any international expansion plans.';
       session.history.push({ role: 'user', content: truncateMsg(message) });
@@ -1388,7 +1428,6 @@ app.post('/api/chat', async function(req, res) {
     }
 
     // ── STEP 2b: Current country ──
-    // ── STEP 2b: Current country ──
     if (mem.name && !mem.currentCountry && state.phase === 'onboarding_current_country') {
       let foundCC = null;
       const lowerMsg = message.toLowerCase().trim();
@@ -1403,8 +1442,7 @@ app.post('/api/chat', async function(req, res) {
 
       if (foundCC) {
         mem.currentCountry = foundCC;
-        // Clear any targetCountry that extractEntities may have set from
-        // this same message — it belongs to the NEXT onboarding step
+        // Clear any targetCountry that extractEntities may have set from this same message
         if (mem.targetCountry === foundCC) {
           mem.targetCountry = null;
           mem.targetCountries = [];
@@ -1424,7 +1462,6 @@ app.post('/api/chat', async function(req, res) {
         return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
       }
     }
-    
 
     // ── STEP 3: Target country ──
     if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
@@ -1434,9 +1471,8 @@ app.post('/api/chat', async function(req, res) {
         if (lowerMsg.includes(kw)) { foundCountry = COUNTRY_MAP[kw]; break; }
       }
 
-      // ── FIX 4: triggerProgressiveSave added to same-country guard ──
       if (foundCountry && foundCountry === mem.currentCountry) {
-        triggerProgressiveSave(session);  // save name+currentCountry even when re-asking
+        triggerProgressiveSave(session);
         const r = 'It looks like ' + foundCountry + ' is where you\'re currently based, ' + mem.name + '. Which country are you looking to *expand into*? For example: UAE, Singapore, USA, UK, Canada, or another market.';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
@@ -1464,6 +1500,14 @@ app.post('/api/chat', async function(req, res) {
       }
     }
 
+    // ─────────────────────────────────────────────
+    // PHASE SELF-HEAL: run before contact/advisory gates
+    // This ensures that if memory was updated by extractEntities above
+    // (e.g. phone/email captured) the phase reflects reality before
+    // we decide which gate to enter.
+    // ─────────────────────────────────────────────
+    healPhase(session);
+
     // ── STEP 4: Contact gate ──
     if (state.phase === 'onboarding_contact' && !contactJustReceived) {
       const kbSection = retrieveKBChunks(message);
@@ -1480,8 +1524,7 @@ app.post('/api/chat', async function(req, res) {
       return res.json({ reply: finalReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
-    // ── STEP 4b: Contact received ──
-    // ── STEP 4b: Contact received ──
+    // ── STEP 4b: Contact received during onboarding_contact ──
     if (contactJustReceived && state.phase === 'onboarding_contact') {
       advancePhase(session);
       const nameGreet   = mem.name || 'there';
@@ -1501,10 +1544,9 @@ app.post('/api/chat', async function(req, res) {
       if (menu) state.lastMenu = { options: menu, context: 'contact_received', createdAt: Date.now() };
       state.leadSaved = true;
 
-      // Save session first, then fire async operations
       await saveSession(session);
 
-      // Run summary update and lead saves in parallel — don't block the response
+      // Run all async saves in parallel — non-blocking
       setImmediate(async function() {
         try {
           await maybeUpdateSummary(session, true);
@@ -1519,22 +1561,26 @@ app.post('/api/chat', async function(req, res) {
       return res.json({ reply: confirmReply, sessionId: sessionId, menu: menu || null, phase: state.phase });
     }
 
-    // ── STEP 5: Contact received in advisory phase ──
+    // ── STEP 4c: Contact received in advisory phase ──
     if (contactJustReceived && state.phase === 'advisory') {
+      // Save immediately — don't defer, this is a completed lead
       await saveLeadData(session, true);
       await appendToSheet(session);
-      if (!state.leadSaved) { await sendLeadEmail(session); state.leadSaved = true; }
+      if (!state.leadSaved) {
+        await sendLeadEmail(session);
+        state.leadSaved = true;
+      }
       await saveSession(session);
     }
 
-    // ── STEP 6: Topics ──
+    // ── STEP 5: Topics ──
     const topic = inferTopic(message);
     if (topic && !state.topicsDiscussed.includes(topic)) {
       state.topicsDiscussed.push(topic);
       if (state.topicsDiscussed.length > 20) state.topicsDiscussed = state.topicsDiscussed.slice(-20);
     }
 
-    // ── STEP 7: Memory recall ──
+    // ── STEP 6: Memory recall ──
     const memoryReply = checkMemoryRecall(message, session);
     if (memoryReply) {
       session.history.push({ role: 'user', content: truncateMsg(message) });
@@ -1544,7 +1590,7 @@ app.post('/api/chat', async function(req, res) {
       return res.json({ reply: memoryReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
-    // ── STEP 8: Claude response ──
+    // ── STEP 7: Claude response ──
     const kbSection = retrieveKBChunks(message);
     const phaseHint = buildPhaseHint(mem, state);
     const { reply, rateLimited, waitSec } = await callClaude(session, message, kbSection, phaseHint);
@@ -1560,6 +1606,7 @@ app.post('/api/chat', async function(req, res) {
     if (newMenu) { state.lastMenu = { options: newMenu, context: topic || message.substring(0, 60), createdAt: Date.now() }; }
     else if (state.phase === 'advisory') { state.lastMenu = null; }
 
+    // Update summary (every 5 messages or if forced)
     await maybeUpdateSummary(session);
 
     const hasContact = !!(mem.email || mem.phone);
@@ -1571,6 +1618,7 @@ app.post('/api/chat', async function(req, res) {
       await saveLeadData(session, true);
       await appendToSheet(session);
     } else {
+      // Always save partial lead data on every advisory turn
       triggerProgressiveSave(session);
     }
 
@@ -1733,7 +1781,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.7 — Lowercase name fix + progressive save on every turn');
+    console.log('\n🚀 Comply Website Bot v3.8 — Phase self-heal + robust contact/summary saving');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
