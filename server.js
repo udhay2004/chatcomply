@@ -1558,7 +1558,8 @@ app.post('/api/chat', async function(req, res) {
         }
       });
 
-      return res.json({ reply: cleanReply, sessionId: sessionId, menu: null, phase: state.phase, ... });
+      // FIXED: Changed from cleanReply to confirmReply and removed the invalid ... 
+      return res.json({ reply: confirmReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
     // ── STEP 4c: Contact received in advisory phase ──
