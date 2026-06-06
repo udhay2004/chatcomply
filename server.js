@@ -1558,7 +1558,7 @@ app.post('/api/chat', async function(req, res) {
         }
       });
 
-      return res.json({ reply: confirmReply, sessionId: sessionId, menu: menu || null, phase: state.phase });
+      return res.json({ reply: cleanReply, sessionId: sessionId, menu: null, phase: state.phase, ... });
     }
 
     // ── STEP 4c: Contact received in advisory phase ──
@@ -1623,7 +1623,7 @@ app.post('/api/chat', async function(req, res) {
     }
 
     await saveSession(session);
-    return res.json({ reply: cleanReply, sessionId: sessionId, menu: newMenu || null, phase: state.phase,
+    return res.json({ reply: cleanReply, sessionId: sessionId, menu: null, phase: state.phase, 
       leadData: { name: mem.name, email: mem.email, phone: mem.phone, targetCountry: mem.targetCountry, serviceNeeded: mem.serviceNeeded } });
 
   } catch (err) {
