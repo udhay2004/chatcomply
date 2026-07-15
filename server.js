@@ -323,6 +323,60 @@ const COUNTRY_MAP = {
   'europe': 'Europe',
   'africa': 'Africa',
   'asia':   'Asia',
+
+  // Common CITIES mapped to their country — people very often say "I'm from
+  // Bangkok" / "based in Mumbai" rather than the country name itself. Without
+  // these, currentCountry extraction silently fails and the whole onboarding
+  // flow stalls.
+  'bangkok':      'Thailand',
+  'chiang mai':   'Thailand',
+  'mumbai':       'India',
+  'delhi':        'India',
+  'new delhi':    'India',
+  'bangalore':    'India',
+  'bengaluru':    'India',
+  'hyderabad':    'India',
+  'chennai':      'India',
+  'pune':         'India',
+  'kolkata':      'India',
+  'ahmedabad':    'India',
+  'london':       'UK',
+  'manchester':   'UK',
+  'birmingham':   'UK',
+  'paris':        'France',
+  'tokyo':        'Japan',
+  'osaka':        'Japan',
+  'sydney':       'Australia',
+  'melbourne':    'Australia',
+  'brisbane':     'Australia',
+  'toronto':      'Canada',
+  'vancouver':    'Canada',
+  'montreal':     'Canada',
+  'new york':     'USA',
+  'san francisco':'USA',
+  'los angeles':  'USA',
+  'chicago':      'USA',
+  'riyadh':       'Saudi Arabia',
+  'jeddah':       'Saudi Arabia',
+  'kuala lumpur': 'Malaysia',
+  'jakarta':      'Indonesia',
+  'manila':       'Philippines',
+  'ho chi minh':  'Vietnam',
+  'hanoi':        'Vietnam',
+  'colombo':      'Sri Lanka',
+  'karachi':      'Pakistan',
+  'lahore':       'Pakistan',
+  'dhaka':        'Bangladesh',
+  'kathmandu':    'Nepal',
+  'shanghai':     'China',
+  'beijing':      'China',
+  'seoul':        'South Korea',
+  'auckland':     'New Zealand',
+  'lagos':        'Nigeria',
+  'nairobi':      'Kenya',
+  'cairo':        'Egypt',
+  'johannesburg': 'South Africa',
+  'cape town':    'South Africa',
 };
 
 const ALL_COUNTRY_WORDS = new Set(
@@ -378,6 +432,37 @@ const NAME_INTRO_RE = /^(?:(?:i(?:'m| am|m)|this is|it's|its|call me|name'?s?|hi
 const NAME_STANDALONE_RE = /^([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
 
+// Finds an intro phrase ANYWHERE in the message (not anchored to the whole
+// string) and reads forward word-by-word, stopping at the first stopword,
+// blacklisted word, or punctuation. This is what lets natural messages like
+// "heyy broo, i am nehal turu and i hail from bangkok" correctly yield
+// "Nehal Turu" instead of failing to match at all (the old anchored regex
+// required the ENTIRE message to be nothing but the name).
+const NAME_INTRO_SEARCH_RE = /\b(?:i\s*am|i'm|im|this\s+is|it'?s|call\s+me|my\s+name\s+is|name\s+is|name:)\s+([a-z][a-z\s'\-]{1,60})/i;
+const NAME_STOPWORDS = new Set([
+  'and','from','who','based','currently','here','working','living','in','at','is','the','a','an',
+  'i','my','company','business','looking','want','wanna','need','with','for','on','about','to','we',
+  'also','but','so','then','just','it','its',"it's",'hail','coming',
+]);
+
+function extractNameLoose(t) {
+  const m = t.match(NAME_INTRO_SEARCH_RE);
+  if (!m) return null;
+  const words = m[1].trim().split(/\s+/);
+  const nameWords = [];
+  for (const w of words) {
+    const stripped = w.replace(/[.,!?;:]+$/, '');
+    if (!stripped) break;
+    const lw = stripped.toLowerCase();
+    if (nameWords.length >= 3) break;
+    if (NAME_STOPWORDS.has(lw) || NAME_BLACKLIST.has(lw) || ALL_COUNTRY_WORDS.has(lw)) break;
+    if (!/^[A-Za-z'\-]+$/.test(stripped)) break;
+    nameWords.push(stripped);
+    if (/[.,!?;:]$/.test(w)) break; // punctuation right after this word ends the name
+  }
+  return nameWords.length ? toTitleCase(nameWords.join(' ')) : null;
+}
+
 // A short list of interrogative/filler openers. If a "standalone" candidate
 // starts with one of these it is almost certainly NOT a name (e.g. "hows asean",
 // "whats up", "wheres the form") — this is what let "Hows Asean" through before.
@@ -413,6 +498,12 @@ function extractName(msg, phase) {
       return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
     })) return toTitleCase(candidate);
   }
+
+  // Loose search — handles the common real-world case where the name is
+  // embedded inside a longer, casual sentence rather than being the entire
+  // message ("heyy broo, i am nehal turu and i hail from bangkok").
+  const loose = extractNameLoose(t);
+  if (loose) return loose;
 
   // Bare standalone word(s) as a name is only trustworthy when we are
   // explicitly in the middle of asking "who am I speaking with?"
@@ -807,6 +898,8 @@ async function extractEntities(msg, mem, phase) {
         /\bi(?:'m| am) (?:based |currently )?in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
         /\bliving in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
         /\bi(?:'m| am) from\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bi\s+hail\s+from\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
+        /\bhail(?:s|ing)?\s+from\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
         /\bcurrently in\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
         /\bfrom\s+([a-z][a-z\s]{1,24})(?=\s*[,.]|$)/i,
       ];
@@ -1503,7 +1596,12 @@ app.post('/api/chat', async function(req, res) {
 
         if (state.phase === 'new' || state.phase === 'onboarding_name') {
           advancePhase(session);
-          const nameReply = 'Nice to meet you, ' + n + '! 🌟\n\nWhere are you currently based? (e.g. India, UAE, USA, UK, Singapore)';
+          // If the same message already told us the current country (e.g.
+          // "i am nehal and i hail from bangkok"), don't ask for it again —
+          // skip straight to the target-country question.
+          const nameReply = mem.currentCountry
+            ? ('Nice to meet you, ' + n + '! 🌟 Since you\'re based in ' + mem.currentCountry + ', I\'ve got that noted.\n\nWhich country or market are you looking to expand into? (e.g. UAE, Singapore, USA, UK, Canada)')
+            : ('Nice to meet you, ' + n + '! 🌟\n\nWhere are you currently based? (e.g. India, UAE, USA, UK, Singapore)');
           session.history.push({ role: 'user', content: truncateMsg(message) });
           session.history.push({ role: 'assistant', content: truncateMsg(nameReply) });
           await saveSession(session);
