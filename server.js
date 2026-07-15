@@ -155,6 +155,8 @@ function freshSession(sessionId) {
     state: {
       phase: 'new', topicsDiscussed: [], lastMenu: null,
       leadSaved: false, contactRequested: false, contactNudgeSent: false,
+      skipped: { currentCountry: false, targetCountry: false, contact: false },
+      contactAttempts: 0,
     },
     createdAt: new Date(), lastActive: new Date(),
   };
@@ -183,6 +185,8 @@ async function getSession(sessionId) {
   s.state.leadSaved        = s.state.leadSaved        || false;
   s.state.contactRequested = s.state.contactRequested || false;
   s.state.contactNudgeSent = s.state.contactNudgeSent || false;
+  s.state.skipped          = s.state.skipped          || { currentCountry: false, targetCountry: false, contact: false };
+  s.state.contactAttempts  = s.state.contactAttempts  || 0;
   s.history = s.history || [];
   cSet(sessionId, s);
   return s;
@@ -330,7 +334,8 @@ const ALL_COUNTRY_WORDS = new Set(
 // ─────────────────────────────────────────────
 const NAME_BLACKLIST = new Set([
   'hi','hello','hey','okay','ok','yes','no','sure','thanks','thank','please',
-  'tell','about','how','what','where','when','why','which','who','can','could',
+  'tell','about','how','hows',"how's",'whats',"what's",'wheres',"where's",'whens',"when's",'whos',"who's",
+  'what','where','when','why','which','who','can','could',
   'would','should','need','want','like','just','also','even','still','now',
   'india','usa','uae','uk','singapore','canada','dubai','delhi','mumbai',
   'bangalore','hyderabad','chennai','pune','kolkata',
@@ -351,7 +356,7 @@ const NAME_BLACKLIST = new Set([
   'january','february','march','april','june','july','august','september',
   'october','november','december','yesterday','today','tomorrow',
   'smelly','random','test','dummy','fake','sample','unknown','anonymous',
-  'hyy','byee','bye','yep','nope','yeah','yup','nah',
+  'hyy','byee','bye','yep','nope','yeah','yup','nah','na','none','n/a','nil','skip',
   'interested','interesting','expansion','advisory','consultant','consulting',
   'founder','director','manager','executive','partner','investor','advisor',
   'registered','incorporated','licensed','certified','accredited',
@@ -359,6 +364,10 @@ const NAME_BLACKLIST = new Set([
   'welcome','greetings','morning','evening','afternoon','regards','sincerely',
   'currently','previously','recently','immediately','directly','generally',
   'basically','essentially','specifically','particularly','primarily','mainly',
+  // regions / blocs / orgs that are NOT names — this was the source of the
+  // "Hows Asean" bug (neither word was blacklisted before)
+  'asean','eu','gcc','brics','nato','oecd','un','apac','emea','mena','saarc',
+  'region','regions','bloc','union','market','markets','zone','zones',
 ]);
 
 function toTitleCase(str) {
@@ -369,7 +378,22 @@ const NAME_INTRO_RE = /^(?:(?:i(?:'m| am|m)|this is|it's|its|call me|name'?s?|hi
 const NAME_STANDALONE_RE = /^([A-Za-z][a-zA-Z'\-]{1,20}(?:\s+[A-Za-z][a-zA-Z'\-]{1,20}){0,2})\s*(?:here|speaking|this side)?[.!]?\s*$/;
 const CORPORATE_SUFFIX_RE = /\b(calling|support|corp|ltd|inc|llc|pvt|telecom|bank|group|global|solutions|services|systems|technologies|tech|team|helpdesk|desk)\b/i;
 
-function extractName(msg) {
+// A short list of interrogative/filler openers. If a "standalone" candidate
+// starts with one of these it is almost certainly NOT a name (e.g. "hows asean",
+// "whats up", "wheres the form") — this is what let "Hows Asean" through before.
+const QUESTION_OPENER_RE = /^(how|hows|how's|what|whats|what's|where|wheres|where's|when|whens|when's|why|who|whos|who's|is|are|can|could|do|does|did)\b/i;
+
+/**
+ * @param {string} msg
+ * @param {string} [phase] - current onboarding phase. The bare "standalone
+ *   word(s) = name" heuristic is only trusted while we are actually asking
+ *   for a name (phase 'new' / 'onboarding_name'). At any other point in the
+ *   conversation a short, unpunctuated message ("nope", "hows asean", "none")
+ *   is far more likely to be an answer/aside than someone introducing
+ *   themselves, so we require an explicit intro pattern ("I'm X", "my name is X")
+ *   instead of guessing.
+ */
+function extractName(msg, phase) {
   const t = msg.trim();
   if (t.length > 120) return null;
   if (t.includes('?')) return null;
@@ -379,6 +403,7 @@ function extractName(msg) {
   if (CORPORATE_SUFFIX_RE.test(t)) return null;
   if (/\d/.test(t)) return null;
   if (/@/.test(t) || /my mail|my email|my number|my phone|whatsapp/i.test(lower)) return null;
+  if (QUESTION_OPENER_RE.test(t)) return null;
 
   const intro = t.match(NAME_INTRO_RE);
   if (intro) {
@@ -389,13 +414,18 @@ function extractName(msg) {
     })) return toTitleCase(candidate);
   }
 
-  const standalone = t.match(NAME_STANDALONE_RE);
-  if (standalone) {
-    const candidate = standalone[1].trim();
-    const words = candidate.split(/\s+/);
-    if (words.length >= 1 && words.length <= 3 && words.every(function(w) {
-      return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
-    })) return toTitleCase(candidate);
+  // Bare standalone word(s) as a name is only trustworthy when we are
+  // explicitly in the middle of asking "who am I speaking with?"
+  const isNamePhase = (phase === 'new' || phase === 'onboarding_name');
+  if (isNamePhase) {
+    const standalone = t.match(NAME_STANDALONE_RE);
+    if (standalone) {
+      const candidate = standalone[1].trim();
+      const words = candidate.split(/\s+/);
+      if (words.length >= 1 && words.length <= 3 && words.every(function(w) {
+        return w.length >= 2 && !NAME_BLACKLIST.has(w.toLowerCase()) && !ALL_COUNTRY_WORDS.has(w.toLowerCase()) && /^[A-Za-z'\-]+$/.test(w);
+      })) return toTitleCase(candidate);
+    }
   }
   return null;
 }
@@ -405,6 +435,18 @@ function stripHallucinatedName(reply, knownName) {
   return reply
     .replace(/\b(Hi|Hello|Hey|Thanks|Perfect|Sure|Great|Absolutely|Of course|Certainly|Welcome back),?\s+[A-Z][a-z]{1,20}[,!.]/g, function(match, word) { return word + '!'; })
     .replace(/\b(Hi|Hello|Hey)\s+[A-Z][a-z]{1,20}[,!.]/g, function(match, word) { return word + ' there!'; });
+}
+
+// ─────────────────────────────────────────────
+// DECLINE / SKIP DETECTION
+// ─────────────────────────────────────────────
+// Matches short refusals like "nope", "none", "skip", "not now", "I don't want
+// to answer", "prefer not to say", "n/a", etc. Used so onboarding gates stop
+// repeating the exact same question forever when the user has clearly opted out.
+const DECLINE_RE = /^(?:nope?|nah|n\/?a|none|nil|skip(?:\s+(?:that|this|it))?|not\s+(?:now|yet|really|interested)|no\s+thanks?|i\s*(?:'d|would)?\s*(?:rather|prefer)\s*not(?:\s+to\s+(?:say|answer|share))?|don'?t\s+want\s+to\s+(?:answer|share|say)|i\s*don'?t\s+(?:know|have\s+one)|later|no)\.?!?$/i;
+
+function isDecline(msg) {
+  return DECLINE_RE.test(msg.trim());
 }
 
 // ─────────────────────────────────────────────
@@ -882,6 +924,10 @@ function buildContextBlock(mem, state) {
   if (state.topicsDiscussed && state.topicsDiscussed.length > 0) lines.push('Topics covered: ' + state.topicsDiscussed.join(', '));
   if (mem.conversationSummary) lines.push('Previous conversation summary: ' + mem.conversationSummary);
   if (state.phase)            lines.push('Phase: ' + state.phase);
+  if (state.skipped && (state.skipped.currentCountry || state.skipped.targetCountry || state.skipped.contact)) {
+    const skippedList = Object.keys(state.skipped).filter(function(k) { return state.skipped[k]; });
+    lines.push('User chose NOT to answer: ' + skippedList.join(', ') + '. Do NOT ask about these again — proceed naturally.');
+  }
   if (state.lastMenu) {
     const mn = state.lastMenu;
     lines.push('\n[ACTIVE MENU — context: "' + mn.context + '"]\n1. ' + mn.options[0] + '\n2. ' + mn.options[1] + '\n3. ' + mn.options[2] + '\n4. ' + mn.options[3]);
@@ -936,6 +982,8 @@ ONBOARDING FLOW:
 - NEVER ask name and country in the same message.
 - NEVER ask current country and target country in the same message.
 - If asked "do you remember my name" and you have it in [USER CONTEXT]: state it. If you don't: ask for it.
+- If [USER CONTEXT] says the user chose NOT to answer something (skipped), NEVER ask about that field again — move the conversation forward naturally instead.
+- Every user is different — read what they actually wrote and respond to THAT, in your own words. Do not force a rigid script if the user has already volunteered information, changed the subject, or declined to answer.
 
 ADVISORY RESPONSES:
 - Answer substantively from the knowledge base sections provided below.
@@ -1024,17 +1072,17 @@ function advancePhase(session) {
     return;
   }
   if (state.phase === 'onboarding_current_country') {
-    state.phase = mem.currentCountry ? 'onboarding_country' : 'onboarding_current_country';
+    state.phase = (mem.currentCountry || state.skipped.currentCountry) ? 'onboarding_country' : 'onboarding_current_country';
     return;
   }
   if (state.phase === 'onboarding_country') {
-    if (mem.targetCountry || (mem.targetCountries && mem.targetCountries.length > 0)) {
-      state.phase = (mem.email || mem.phone) ? 'advisory' : 'onboarding_contact';
+    if (mem.targetCountry || (mem.targetCountries && mem.targetCountries.length > 0) || state.skipped.targetCountry) {
+      state.phase = (mem.email || mem.phone || state.skipped.contact) ? 'advisory' : 'onboarding_contact';
     }
     return;
   }
   if (state.phase === 'onboarding_contact') {
-    if (mem.email || mem.phone) state.phase = 'advisory';
+    if (mem.email || mem.phone || state.skipped.contact) state.phase = 'advisory';
     return;
   }
 }
@@ -1052,29 +1100,30 @@ function healPhase(session) {
   // Already in advisory — nothing to heal
   if (phase === 'advisory') return;
 
-  // If we have contact info and we're still in onboarding_contact, advance
-  if (phase === 'onboarding_contact' && (mem.email || mem.phone)) {
+  // If we have contact info (or it was explicitly skipped) and we're still in
+  // onboarding_contact, advance
+  if (phase === 'onboarding_contact' && (mem.email || mem.phone || state.skipped.contact)) {
     state.phase = 'advisory';
     console.log('🔧 Phase healed: onboarding_contact → advisory');
     return;
   }
 
-  // If we have a target country and we're still in onboarding_country, advance
+  // If we have a target country (or it was skipped) and we're still in onboarding_country, advance
   if (phase === 'onboarding_country' &&
-      (mem.targetCountry || (mem.targetCountries && mem.targetCountries.length > 0))) {
-    state.phase = (mem.email || mem.phone) ? 'advisory' : 'onboarding_contact';
+      (mem.targetCountry || (mem.targetCountries && mem.targetCountries.length > 0) || state.skipped.targetCountry)) {
+    state.phase = (mem.email || mem.phone || state.skipped.contact) ? 'advisory' : 'onboarding_contact';
     console.log('🔧 Phase healed: onboarding_country → ' + state.phase);
     return;
   }
 
-  // If we have currentCountry and we're still in onboarding_current_country, advance
-  if (phase === 'onboarding_current_country' && mem.currentCountry) {
+  // If we have currentCountry (or it was skipped) and we're still in onboarding_current_country, advance
+  if (phase === 'onboarding_current_country' && (mem.currentCountry || state.skipped.currentCountry)) {
     // Only advance if there's no target country yet
     if (!mem.targetCountry && !(mem.targetCountries && mem.targetCountries.length > 0)) {
       state.phase = 'onboarding_country';
       console.log('🔧 Phase healed: onboarding_current_country → onboarding_country');
     } else {
-      state.phase = (mem.email || mem.phone) ? 'advisory' : 'onboarding_contact';
+      state.phase = (mem.email || mem.phone || state.skipped.contact) ? 'advisory' : 'onboarding_contact';
       console.log('🔧 Phase healed: onboarding_current_country → ' + state.phase);
     }
     return;
@@ -1363,9 +1412,10 @@ app.post('/api/chat', async function(req, res) {
     // ── FIRST MESSAGE ──
     if (session.history.length === 0 && (state.phase === 'new' || state.phase === 'onboarding_name')) {
       state.phase = 'onboarding_name';
-      const firstMsgName = extractName(message);
+      const firstMsgName = extractName(message, state.phase);
       if (!firstMsgName) {
         const welcome = 'Hi there! 👋 Welcome to Comply Globally.\n\nI\'m your international business expansion advisor — here to help you navigate incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
+        session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: welcome });
         await saveSession(session);
         triggerProgressiveSave(session);
@@ -1374,24 +1424,61 @@ app.post('/api/chat', async function(req, res) {
       mem.name = firstMsgName;
       console.log('✅ Name locked from first message: ' + firstMsgName);
       triggerProgressiveSave(session);
+      // Also try to pick up current country if it was volunteered in the same message
+      const { updates: firstUpdates } = await extractEntities(message, mem, state.phase);
+      if (firstUpdates.currentCountry) mem.currentCountry = firstUpdates.currentCountry;
       advancePhase(session);
-      const nameWelcome = 'Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '!\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhere are you currently based? This helps me understand your starting point for any international expansion plans.';
+      const nameWelcome = mem.currentCountry
+        ? ('Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '! Since you\'re based in ' + mem.currentCountry + ', I\'ve got that noted.\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhich country or market are you looking to expand into?')
+        : ('Hi there! 👋 Welcome to Comply Globally — nice to meet you, ' + firstMsgName + '!\n\nI\'m your international business expansion advisor, here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nWhere are you currently based? This helps me understand your starting point for any international expansion plans.');
       session.history.push({ role: 'user', content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(nameWelcome) });
       await saveSession(session);
       return res.json({ reply: nameWelcome, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
+    // ── STEP 0: Global decline/skip handling ──
+    // If the user clearly refuses to answer whatever we're currently asking,
+    // mark that field as skipped and move the flow forward instead of
+    // repeating the same question (this was the main cause of the "keeps
+    // giving the same text again and again" complaint).
+    if (isDecline(message)) {
+      if (state.phase === 'onboarding_current_country' && !mem.currentCountry) {
+        state.skipped.currentCountry = true;
+        advancePhase(session); healPhase(session);
+      } else if (state.phase === 'onboarding_country' && !mem.targetCountry) {
+        state.skipped.targetCountry = true;
+        advancePhase(session); healPhase(session);
+      } else if (state.phase === 'onboarding_contact' && !mem.email && !mem.phone) {
+        state.skipped.contact = true;
+        advancePhase(session); healPhase(session);
+      }
+    }
+
     // ── STEP 1: Entity extraction ──
     const { updates, validationError } = await extractEntities(message, mem, state.phase);
 
-    if (validationError) {
+    if (validationError && !isDecline(message)) {
+      state.contactAttempts = (state.contactAttempts || 0) + 1;
+      // After repeated failed attempts, stop hammering the same error and
+      // offer to move on instead of looping forever.
+      if (state.contactAttempts >= 3 && state.phase === 'onboarding_contact') {
+        state.skipped.contact = true;
+        advancePhase(session); healPhase(session);
+        const moveOn = 'No worries — we can pick up your contact details later. Let\'s keep going: what would you like to know about ' + (mem.targetCountry || 'your expansion plans') + '?';
+        session.history.push({ role: 'user', content: truncateMsg(message) });
+        session.history.push({ role: 'assistant', content: truncateMsg(moveOn) });
+        await saveSession(session);
+        triggerProgressiveSave(session);
+        return res.json({ reply: moveOn, sessionId: sessionId, menu: null, phase: state.phase });
+      }
       session.history.push({ role: 'user',      content: truncateMsg(message) });
       session.history.push({ role: 'assistant', content: truncateMsg(validationError.message) });
       await saveSession(session);
       triggerProgressiveSave(session);
       return res.json({ reply: validationError.message, sessionId: sessionId, menu: null, phase: state.phase, validationFailed: true });
     }
+    state.contactAttempts = 0;
 
     let contactJustReceived = false;
     if (Object.keys(updates).length > 0) {
@@ -1409,7 +1496,7 @@ app.post('/api/chat', async function(req, res) {
 
     // ── STEP 2: Name extraction ──
     if (!mem.name) {
-      const n = extractName(message);
+      const n = extractName(message, state.phase);
       if (n) {
         mem.name = n;
         console.log('✅ Name locked: ' + n);
@@ -1428,7 +1515,7 @@ app.post('/api/chat', async function(req, res) {
     }
 
     // ── STEP 2b: Current country ──
-    if (mem.name && !mem.currentCountry && state.phase === 'onboarding_current_country') {
+    if (mem.name && !mem.currentCountry && !state.skipped.currentCountry && state.phase === 'onboarding_current_country') {
       let foundCC = null;
       const lowerMsg = message.toLowerCase().trim();
 
@@ -1455,7 +1542,7 @@ app.post('/api/chat', async function(req, res) {
         await saveSession(session);
         return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
       } else {
-        const r = 'Which country are you currently based in, ' + mem.name + '? For example: India, UAE, USA, UK, Singapore, Canada.';
+        const r = 'Which country are you currently based in, ' + mem.name + '? For example: India, UAE, USA, UK, Singapore, Canada. (Or just say "skip" if you\'d rather not share.)';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
         await saveSession(session);
@@ -1464,7 +1551,7 @@ app.post('/api/chat', async function(req, res) {
     }
 
     // ── STEP 3: Target country ──
-    if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && state.phase === 'onboarding_country') {
+    if (mem.name && !mem.targetCountry && mem.targetCountries.length === 0 && !state.skipped.targetCountry && state.phase === 'onboarding_country') {
       let foundCountry = null;
       const lowerMsg = message.toLowerCase().trim();
       for (const kw of Object.keys(COUNTRY_MAP)) {
@@ -1492,7 +1579,7 @@ app.post('/api/chat', async function(req, res) {
         await saveSession(session);
         return res.json({ reply: r, sessionId: sessionId, menu: null, phase: state.phase });
       } else {
-        const r = 'Which market are you looking to expand into, ' + mem.name + '? For example: UAE, Singapore, UK, USA, or Canada.';
+        const r = 'Which market are you looking to expand into, ' + mem.name + '? For example: UAE, Singapore, UK, USA, or Canada. (Or say "skip" if you\'re still deciding.)';
         session.history.push({ role: 'user', content: truncateMsg(message) });
         session.history.push({ role: 'assistant', content: truncateMsg(r) });
         await saveSession(session);
@@ -1509,7 +1596,7 @@ app.post('/api/chat', async function(req, res) {
     healPhase(session);
 
     // ── STEP 4: Contact gate ──
-    if (state.phase === 'onboarding_contact' && !contactJustReceived) {
+    if (state.phase === 'onboarding_contact' && !contactJustReceived && !state.skipped.contact) {
       const kbSection = retrieveKBChunks(message);
       const hint = '\n\n[HARD REQUIREMENT — onboarding_contact phase: You MUST end this reply with EXACTLY this line: "Before we go further, could I grab your email or WhatsApp number? If sharing a phone number, please include your country code (e.g. +91, +1, +971). Our team will use it to send you a personalised quote and insights for ' + (mem.targetCountry || 'your target market') + '." Do NOT include the numbered follow-up menu. Do NOT skip this line under any circumstances.]';
       const { reply, rateLimited, waitSec } = await callClaude(session, message, kbSection, hint);
@@ -1562,15 +1649,15 @@ app.post('/api/chat', async function(req, res) {
       return res.json({ reply: confirmReply, sessionId: sessionId, menu: null, phase: state.phase });
     }
 
-    // ── STEP 4c: Contact received in advisory phase ──
-    if (contactJustReceived && state.phase === 'advisory') {
-      // Save immediately — don't defer, this is a completed lead
-      await saveLeadData(session, true);
-      await appendToSheet(session);
-      if (!state.leadSaved) {
+    // ── STEP 4c: Contact skipped or received in advisory phase ──
+    if (state.phase === 'advisory' && !state.leadSaved && (state.skipped.contact || contactJustReceived)) {
+      if (contactJustReceived) {
+        // Save immediately — don't defer, this is a completed lead
+        await saveLeadData(session, true);
+        await appendToSheet(session);
         await sendLeadEmail(session);
-        state.leadSaved = true;
       }
+      state.leadSaved = true;
       await saveSession(session);
     }
 
@@ -1782,7 +1869,7 @@ app.get('/', function(req, res) { res.sendFile(path.join(__dirname, 'public', 'i
 const PORT = process.env.PORT || 5000;
 connectMongo().then(function() {
   app.listen(PORT, function() {
-    console.log('\n🚀 Comply Website Bot v3.8 — Phase self-heal + robust contact/summary saving');
+    console.log('\n🚀 Comply Website Bot v3.9 — name-extraction fix + decline/skip handling');
     console.log('📡 Port: ' + PORT);
     console.log('💬 POST /api/chat');
     console.log('📊 GET  /leads');
