@@ -439,6 +439,32 @@ const COUNTRY_MAP = {
   'cairo':        'Egypt',
   'johannesburg': 'South Africa',
   'cape town':    'South Africa',
+
+  // US states, DC, and major cities not already covered above. These are
+  // the most common gap: someone says "I'm from Washington" / "I'm in
+  // Texas" and, without this, the currentCountry extractor has nothing to
+  // map that to — it silently fails and the bot re-asks a question the
+  // user already answered.
+  'washington':      'USA', 'washington dc':  'USA', 'washington d.c.': 'USA', 'dc': 'USA',
+  'seattle':          'USA', 'boston':         'USA', 'miami':          'USA',
+  'houston':          'USA', 'dallas':         'USA', 'austin':         'USA',
+  'atlanta':          'USA', 'denver':         'USA', 'phoenix':        'USA',
+  'philadelphia':     'USA', 'detroit':        'USA', 'portland':       'USA',
+  'las vegas':        'USA', 'san diego':      'USA', 'san jose':       'USA',
+  'texas':            'USA', 'california':     'USA', 'florida':        'USA',
+  'new jersey':       'USA', 'illinois':       'USA', 'georgia':        'USA',
+  'ontario':          'Canada', 'quebec':       'Canada', 'alberta':     'Canada',
+  'scotland':         'UK', 'wales':           'UK', 'edinburgh':       'UK',
+  'glasgow':          'UK', 'liverpool':       'UK',
+};
+
+// Common typos/truncations of the above that we still want to resolve —
+// e.g. a message getting cut off mid-word ("washing" instead of
+// "washington") or a very common misspelling. Kept short and conservative
+// (only entries at least 5 characters, to avoid false-positive matches on
+// short unrelated words) since we can't guess every truncation.
+const COUNTRY_MAP_FUZZY = {
+  'washing': 'USA',
 };
 
 const COUNTRY_TO_ISO = {
