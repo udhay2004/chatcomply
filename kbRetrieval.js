@@ -81,8 +81,6 @@ function loadKB() {
   }
 }
 
-loadKB();
-
 function bm25Score(chunk, queryTerms) {
   let score = 0;
   const norm = 1 - BM25_B + BM25_B * (chunk.len / (_avgLen || 1));
@@ -135,3 +133,5 @@ const STOPWORDS = new Set([
   'take','here','come','must','most','need','part','time','year','many','upon',
   'does','still','always','within','during','further','before','against','between',
 ]);
+
+loadKB();
