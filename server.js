@@ -1268,6 +1268,25 @@ app.post('/api/chat', async function(req, res) {
       return res.json({ reply: greeting, sessionId, menu: null, phase: state.phase });
     }
 
+    // Synthetic init ping sent by the widget's bootChat() on open — this is
+    // NOT a real user message and must never be forwarded to the LLM, or the
+    // model will (reasonably) comment on receiving a literal "__init__" string.
+    if (message === '__init__') {
+      if (session.history.length === 0) {
+        const greeting = 'Hi there! 👋 Welcome to Comply Globally. I\'m your international business expansion and compliance advisor — here to help with incorporation, banking, tax, and compliance across 47+ jurisdictions.\n\nBefore we dive in — who am I speaking with?';
+        session.history.push({ role: 'assistant', content: truncateMsg(greeting) });
+        await saveSession(session);
+        return res.json({ reply: greeting, sessionId, menu: null, phase: state.phase });
+      }
+      // Returning visitor with existing history — resend the last bot message
+      // instead of re-greeting or, worse, feeding "__init__" to the model.
+      const lastBot = [...session.history].reverse().find(m => m.role === 'assistant');
+      return res.json({
+        reply: lastBot ? lastBot.content : 'Welcome back!',
+        sessionId, menu: null, phase: state.phase,
+      });
+    }
+
     console.log('\n📩 [' + sessionId.slice(-8) + '] Phase: ' + state.phase + ', Msg: "' + message.substring(0,60) + '"');
 
     // ── STEP 1: extract structured data from this turn (any language) ──
